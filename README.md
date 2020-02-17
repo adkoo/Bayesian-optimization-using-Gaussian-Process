@@ -16,7 +16,6 @@ Step 2) Build your 'scan_params.npy' file:
 Step 3) Run the optimization:
         -For the most basic usage, open basic_gp_example.py and 
         follow the step-by-step instructions in the comments at the top of the file.
-
         -Alternatively, you can try running gp_bayesopt_gui.py
         This should open a graphical user interface.
         Select your machine_interface and scan_params files from the dropdown menus as the top.
