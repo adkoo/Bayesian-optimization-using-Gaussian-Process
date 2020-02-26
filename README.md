@@ -1,6 +1,7 @@
 # Bayesian-optimization-using-Gaussian-Process
 
 These are instructions for using the GP to optimize a function using Bayesian Optimization.
+
 **NOTE: This code is written for python 2.7
 
 Step 1) Build your 'machine interface' file:
