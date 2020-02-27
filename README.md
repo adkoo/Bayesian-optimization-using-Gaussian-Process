@@ -1,9 +1,20 @@
-# Bayesian-optimization-using-Gaussian-Process
+# Bayesian optimization using Gaussian Process
 
-These are instructions for using the GP to optimize a function using Bayesian Optimization.
+Bayesian Optimization using Gaussian Process to optimize an objective function with respect to input controls.
 
-**NOTE: This code is written for python 2.7
+*NOTE: This code is written for python 2.7
 
+## 
+
+This tool was developed primarly for particle accelerators with various machine interfaces. 
+It has the capbabilty to run on:
+1. Real machine (see 'Pegasus_UCLA.py' example)
+2. Simulation (see 'Spear3_SLAC.py' example)
+3. Surrogate model of the machine (see 'APS_ANL.py' example)
+4. analytic function (see 'basic_example.py')
+
+
+## Instructions
 Step 1) Build your 'machine interface' file:
         This file will contain the class object that will represent your target function
         To build it, open machine_interfaces/machine_interface_example.py and
