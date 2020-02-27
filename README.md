@@ -18,18 +18,15 @@ It has the capability to run on:
 ## Instructions to build your own optimizer
 
 **Step 1.** Build your 'machine interface' file:
-        This file will contain the class object that will represent your target function
-        To build it, open machine_interfaces/machine_interface_example.py and
-        follow the step-by-step instructions in the comments at the top of the file.
+        This file will contain the class object that will represent your target function. 
+        To build it, open machine_interfaces/machine_interface_example.py and follow the step-by-step instructions in the comments at the top of the file.
 
 **Step 2.**  Build your 'scan_params.npy' file:
         This is the .npy file that will contain the settings for the optimizer to load and use.
-        To build it, open modules/make_scan_params_file.py and
-        follow the step-by-step instructions in the comments at the top of the file.
+        To build it, open modules/make_scan_params_file.py and follow the step-by-step instructions in the comments at the top of the file.
 
 **Step 3.**  Run the optimization:
-        For the most basic usage, open basic_gp_example.py and 
-        follow the step-by-step instructions in the comments at the top of the file.
+        For the most basic usage, open basic_gp_example.py and follow the step-by-step instructions in the comments at the top of the file.
       
       
 
