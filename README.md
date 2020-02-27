@@ -2,7 +2,7 @@
 
 Bayesian Optimization using Gaussian Process to optimize an objective function with respect to input controls.
 
-*NOTE: This code is written for python 2.7
+*NOTE:* This code is written for python 2.7
 
 ## 
 
