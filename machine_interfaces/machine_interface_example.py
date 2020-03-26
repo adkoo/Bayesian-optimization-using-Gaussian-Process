@@ -28,9 +28,7 @@ class machine_interface:
 
     def getState(self): 
         objective_state = np.exp(-0.5*self.x[0].dot(np.eye(len(self.pvs))).dot(self.x[0])) + 0.01*np.random.normal() #replace with expression that returns float representing current objective value
-
-        
-        #         objective_state = error_func_tst()          
+            
         return np.array(self.x, ndmin = 2), np.array([[objective_state]])
     
     
