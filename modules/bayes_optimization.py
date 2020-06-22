@@ -66,8 +66,8 @@ try:
 except:
     basinhoppingQ = False
 try:
-    #from .parallelstuff import *
-    from parallelstuff import *
+    from .parallelstuff import *
+#     from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
 except:
