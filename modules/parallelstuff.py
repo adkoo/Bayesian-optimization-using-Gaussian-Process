@@ -7,6 +7,7 @@ recovery_sleep_time_seconds = 1 # number of seconds to wait before trying to lau
 import numpy as np
 import multiprocessing as mp
 import copy
+import time
 
 # handle 'IOError: [Errno 4] Interrupted system call' errors from multiprocessing.Queue.get
 #https://stackoverflow.com/questions/14136195/what-is-the-proper-way-to-handle-in-python-ioerror-errno-4-interrupted-syst
@@ -15,7 +16,7 @@ def my_queue_get(queue, block=True, timeout=None):
     while True:
         try:
             return queue.get(block, timeout)
-        except IOError, e:
+        except IOError as e:
             if e.errno != errno.EINTR:
                 raise
 # Now replace instances of queue.get() with my_queue_get(queue), with other
@@ -143,7 +144,7 @@ try:
 
         return res
 except:
-    print 'parallelstuff - WARNING: Could not load parallelminimize.'
+    print('parallelstuff - WARNING: Could not load parallelminimize.')
     pass
 
 def mapworker(f,x,fargs,out_q):
@@ -232,11 +233,11 @@ def testparallelmap(njobs=10, sleepmax=10.e-3): # sleepmax is maximum random sle
         #print 'x = ', x # check that the returns are scrambled in time
         return x
     res = parallelmap(f,range(njobs),()) # is the result in ascending order?
-    print res
+    print(res)
     if res == [[x] for x in range(njobs)]:
-        print 'returned in order'
+        print('returned in order')
     else:
-        print 'result is out of order'
+        print('result is out of order')
 
 def map2worker(f,fargs,out_q):
     # worker invoked in a process puts the results in the output queue out_q
@@ -332,7 +333,7 @@ try:
     
     from scipy.special import erfinv
     #from hammersley import hammersley
-    from chaospy_sequences import create_hammersley_samples
+    from .chaospy_sequences import create_hammersley_samples
         
     def eworker(f,x,fargs,out_q):
         # worker invoked in a process puts the results in the output queue out_q
@@ -451,5 +452,5 @@ try:
         #return res[:,:-1], res[:,-1] # return just coords
     
 except:
-    print 'parallelstuff - WARNING: Could not load parallelgridsearch.'
+    print('parallelstuff - WARNING: Could not load parallelgridsearch.')
     pass

@@ -59,6 +59,7 @@ import operator as op
 import numpy as np
 from scipy.stats import norm
 from scipy.optimize import minimize
+import sys,os
 from scipy.optimize import approx_fprime
 try:
     from scipy.optimize import basinhopping
@@ -66,12 +67,12 @@ try:
 except:
     basinhoppingQ = False
 try:
-    #from .parallelstuff import *
-    from parallelstuff import *
+    from .parallelstuff import *
+    # from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
 except:
-    print ('failed to import parallelstuff')
+    print (f'failed to import parallelstuff; throwing error again:')
     basinhoppingQ = False
     multiprocessingQ = False
 import time
@@ -196,7 +197,6 @@ class BayesOpt:
             for i, dev in enumerate(devices):
                 dev.set_value(x_best[i])
 
-
     def minimize(self, error_func, x):
         # weighting for exploration vs exploitation in the GP at the end of scan, alpha array goes from 1 to zero
         inverse_sign = -1
@@ -248,8 +248,7 @@ class BayesOpt:
         
         # update the model (may want to add noise if using testEI)
         self.model.update(x_new, y_new)# + .5*np.random.randn())
-            
-            
+
     def ForcePoint(self,x_next):
         # force a point acquisition at our discretion and update the model
         
@@ -426,10 +425,13 @@ class BayesOpt:
             else: # single-processing
 
                 if basinhoppingQ:
-                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':(self.model, y_best, self.acq_func[1], alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
+                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,
+                            'args':(self.model, y_best, self.acq_func[1], alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
 
                 else:
-                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], alpha), method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
+                    # ToDo: this doesn't seem to be working. get 'ValueError: `f0` passed has more than 1 dimension.'
+                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], alpha),
+                                   method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
 
                 res = res.x
                 
