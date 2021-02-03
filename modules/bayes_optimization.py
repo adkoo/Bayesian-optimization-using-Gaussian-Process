@@ -66,8 +66,8 @@ try:
 except:
     basinhoppingQ = False
 try:
-    #from .parallelstuff import *
-    from parallelstuff import *
+    from .parallelstuff import *
+#     from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
 except:
@@ -85,7 +85,7 @@ class BayesOpt:
         self.model = model
         self.m = m
         self.bounds = bounds
-        self.searchBoundScaleFactor = 1.
+        self.searchBoundScaleFactor = 2.
         if type(searchBoundScaleFactor) is not type(None):
             try:
                 self.searchBoundScaleFactor = abs(searchBoundScaleFactor)
@@ -370,20 +370,20 @@ class BayesOpt:
 
             if(self.multiprocessingQ): # multi-processing to speed search
 
-#                 neval = 2*int(10.*2.**(ndim/12.))
-#                 nkeep = 2*min(8,neval)
+                neval = 2*int(10.*2.**(ndim/12.))
+                nkeep = 2*min(8,neval)
 
-                neval = int(3) 
-                nkeep = int(2)
+#                 neval = int(3) 
+#                 nkeep = int(2)
                 
                 # parallelgridsearch generates pseudo-random grid, then performs an ICDF transform
                 # to map to multinormal distrinbution centered on x_start and with widths given by hyper params
 
                 # add the 10 best points seen so far (largest Y_obs)
-#                 nbest = 3 # add the best points seen so far (largest Y_obs)
-#                 nstart = 2 # make sure some starting points are there to prevent run away searches
-                nbest = 1 # add the best points seen so far (largest Y_obs)
-                nstart = 1 # make sure some starting points are there to prevent run away searches
+                nbest = 3 # add the best points seen so far (largest Y_obs)
+                nstart = 2 # make sure some starting points are there to prevent run away searches
+#                 nbest = 1 # add the best points seen so far (largest Y_obs)
+#                 nstart = 1 # make sure some starting points are there to prevent run away searches
                
                 
                 yobs = np.array([y[0][0] for y in self.Y_obs])
