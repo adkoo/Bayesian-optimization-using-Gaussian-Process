@@ -26,6 +26,7 @@ import time
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
+UseParralelProcessing = False
 scan_params_filename = 'y_minus_x_gauss_fit.npy'
 # ToDo: this file is mising
 scan_params_filename = 'my_scan_params.npy'
@@ -36,7 +37,6 @@ scan_params = np.load('params/'+scan_params_filename, allow_pickle=True).item()
 
 #how long to wait between acquisitions
 acquisition_delay = scan_params['acquisition_delay']
-acquisition_delay = 0
 #create the machine interface
 dev_ids = scan_params['dev_ids']
 start_point = scan_params['start_point'] #if start_point is set to None, the optimizer will start from the current device settings.
