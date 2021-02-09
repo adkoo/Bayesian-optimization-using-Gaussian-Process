@@ -234,7 +234,6 @@ class BayesOpt:
         # runs the optimizer for one iteration
         # get next point to try using acquisition function
         x_next = self.acquire()
-        print('two')
         if(self.acq_func[0] == 'testEI'):
             ind = x_next
             x_next = np.array(self.acq_func[2].iloc[ind,:-1],ndmin=2)
@@ -245,11 +244,9 @@ class BayesOpt:
             (x_new, y_new) = (x_next, self.acq_func[2].iloc[ind,-1])
         else:
             (x_new, y_new) = self.mi.getState()
-        print('three')
         # add new entry to observed data
         self.X_obs = np.concatenate((self.X_obs,x_new),axis=0)
         self.Y_obs.append(y_new)
-        print('four')
         # update the model (may want to add noise if using testEI)
         self.model.update(x_new, y_new)# + .5*np.random.randn())
 
@@ -517,7 +514,7 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
         tau = 2.*np.log(nsteps**(0.5*ndim+2.)*(np.pi**2.)/3./delta)
         GPUCB = y_mean + np.sqrt(nu * tau * y_var)
 
-    return -GPUCB
+    return float(-GPUCB)
 
 # old version
 #def negUCB(x_new, model, mult):
