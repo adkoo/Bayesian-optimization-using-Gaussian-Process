@@ -121,7 +121,8 @@ try:
                     
                     break # made it this far so break out of the while loop
                 
-                except:
+                except Exception as e:
+                    print(e)
                     time.sleep(recovery_sleep_time_seconds) # wait a bit for processes to close before trying again
             
         res = np.array(res)

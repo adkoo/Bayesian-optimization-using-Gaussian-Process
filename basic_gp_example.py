@@ -21,14 +21,13 @@ from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
 import numpy as np
 import importlib
-mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
+# mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
+import machine_interfaces.machine_interface_example as mi_module
 import time
 import matplotlib.pyplot as plt
-from IPython.display import clear_output
+# from IPython.display import clear_output
 
-UseParralelProcessing = False
 scan_params_filename = 'y_minus_x_gauss_fit.npy'
-# ToDo: this file is mising
 scan_params_filename = 'my_scan_params.npy'
 saveResultsQ = False
 
@@ -37,6 +36,7 @@ scan_params = np.load('params/'+scan_params_filename, allow_pickle=True).item()
 
 #how long to wait between acquisitions
 acquisition_delay = scan_params['acquisition_delay']
+
 #create the machine interface
 dev_ids = scan_params['dev_ids']
 start_point = scan_params['start_point'] #if start_point is set to None, the optimizer will start from the current device settings.
@@ -68,16 +68,19 @@ for i in range(5):
 #     plt.clear()
     
     Obj_state_s.append(mi.getState()[1][0])
+    # f = plt.figure(figsize=(20,3))
+    # ax = f.add_subplot(121)
+    # ax2 = f.add_subplot(122)
+    # ax.set_ylabel('Quads',fontsize=12)
+    # ax.plot(opt.X_obs)
+    # ax2.set_ylabel('Obj_state_s',fontsize=12)
+    # ax2.plot(Obj_state_s)
+    # plt.show(); plt.pause(1);
+#     time.sleep(2)
+    
     opt.OptIter()
-    # time.sleep(acquisition_delay)
-f = plt.figure(figsize=(20,3))
-ax = f.add_subplot(121)
-ax2 = f.add_subplot(122)
-ax.set_ylabel('Quads',fontsize=12)
-ax.plot(opt.X_obs)
-ax2.set_ylabel('Obj_state_s',fontsize=12)
-ax2.plot(Obj_state_s)
-plt.show()
+    time.sleep(acquisition_delay)
+    
     
 #save results if desired
 if saveResultsQ == True:
