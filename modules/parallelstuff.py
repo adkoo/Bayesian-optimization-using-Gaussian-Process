@@ -7,6 +7,7 @@ recovery_sleep_time_seconds = 1 # number of seconds to wait before trying to lau
 import numpy as np
 import multiprocessing as mp
 import copy
+import time
 
 # handle 'IOError: [Errno 4] Interrupted system call' errors from multiprocessing.Queue.get
 #https://stackoverflow.com/questions/14136195/what-is-the-proper-way-to-handle-in-python-ioerror-errno-4-interrupted-syst
@@ -426,7 +427,9 @@ try:
                     
                     break # made it this far so break out of the while loop
                 
-                except:
+                except Exception as e:
+                    print 'ding'
+                    print(e)
                     time.sleep(recovery_sleep_time_seconds) # wait a bit for processes to close before trying again
 
         ## return nkeep smallest values
