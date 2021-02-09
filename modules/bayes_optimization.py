@@ -59,6 +59,7 @@ import operator as op
 import numpy as np
 from scipy.stats import norm
 from scipy.optimize import minimize
+import sys,os
 from scipy.optimize import approx_fprime
 try:
     from scipy.optimize import basinhopping
@@ -67,11 +68,11 @@ except:
     basinhoppingQ = False
 try:
     from .parallelstuff import *
-#     from parallelstuff import *
+    # from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
 except:
-    print ('failed to import parallelstuff')
+    print (f'failed to import parallelstuff; throwing error again:')
     basinhoppingQ = False
     multiprocessingQ = False
 import time
@@ -85,7 +86,7 @@ class BayesOpt:
         self.model = model
         self.m = m
         self.bounds = bounds
-        self.searchBoundScaleFactor = 2.
+        self.searchBoundScaleFactor = 1.
         if type(searchBoundScaleFactor) is not type(None):
             try:
                 self.searchBoundScaleFactor = abs(searchBoundScaleFactor)
@@ -196,7 +197,6 @@ class BayesOpt:
             for i, dev in enumerate(devices):
                 dev.set_value(x_best[i])
 
-
     def minimize(self, error_func, x):
         # weighting for exploration vs exploitation in the GP at the end of scan, alpha array goes from 1 to zero
         inverse_sign = -1
@@ -229,27 +229,28 @@ class BayesOpt:
 
     def OptIter(self,pause=0):
         # runs the optimizer for one iteration
-    
+        print('one')
         # get next point to try using acquisition function
         x_next = self.acquire()
+        print('two')
         if(self.acq_func[0] == 'testEI'):
             ind = x_next
             x_next = np.array(self.acq_func[2].iloc[ind,:-1],ndmin=2)
-        
+
         # change position of interface and get resulting y-value
         self.mi.setX(x_next)
         if(self.acq_func[0] == 'testEI'):
             (x_new, y_new) = (x_next, self.acq_func[2].iloc[ind,-1])
         else:
             (x_new, y_new) = self.mi.getState()
+        print('three')
         # add new entry to observed data
         self.X_obs = np.concatenate((self.X_obs,x_new),axis=0)
         self.Y_obs.append(y_new)
-        
+        print('four')
         # update the model (may want to add noise if using testEI)
         self.model.update(x_new, y_new)# + .5*np.random.randn())
-            
-            
+
     def ForcePoint(self,x_next):
         # force a point acquisition at our discretion and update the model
         
@@ -292,14 +293,18 @@ class BayesOpt:
         starts search at current position.
         """
         # look from best positions
+
         (x_best, y_best) = self.best_seen()
+
         self.x_best = x_best
         x_curr = self.current_x[-1]
         x_start = x_best
-            
+
         ndim = x_curr.size # dimension of the feature space we're searching NEEDED FOR UCB
         try:
+
             nsteps = 1 + self.X_obs.shape[0] # acquisition number we're on  NEEDED FOR UCB
+
         except:
             nsteps = 1
 
@@ -316,6 +321,8 @@ class BayesOpt:
 
         else:
             iter_bounds = self.bounds
+
+
 
         # options for finding the peak of the acquisition function:
         optmethod = 'L-BFGS-B' # L-BFGS-B, BFGS, TNC, and SLSQP allow bounds whereas Powell and COBYLA don't
@@ -346,6 +353,7 @@ class BayesOpt:
             aqfcn = negUCB
             fargs = (self.model, ndim, nsteps, self.ucb_params[0], self.ucb_params[1])
 
+
         # maybe something mitch was using once? (can probably remove)
         elif(self.acq_func[0] == 'testEI'):
             # collect all possible x values
@@ -360,6 +368,7 @@ class BayesOpt:
                     best_option_score = (i, result)
 
             # return the index of the best option
+
             return best_option_score[0]
 
         else:
@@ -370,22 +379,23 @@ class BayesOpt:
 
             if(self.multiprocessingQ): # multi-processing to speed search
 
-                neval = 2*int(10.*2.**(ndim/12.))
-                nkeep = 2*min(8,neval)
+#                 neval = 2*int(10.*2.**(ndim/12.))
+#                 nkeep = 2*min(8,neval)
 
-#                 neval = int(3) 
-#                 nkeep = int(2)
+                neval = int(3) 
+                nkeep = int(2)
                 
                 # parallelgridsearch generates pseudo-random grid, then performs an ICDF transform
                 # to map to multinormal distrinbution centered on x_start and with widths given by hyper params
 
                 # add the 10 best points seen so far (largest Y_obs)
-                nbest = 3 # add the best points seen so far (largest Y_obs)
-                nstart = 2 # make sure some starting points are there to prevent run away searches
-#                 nbest = 1 # add the best points seen so far (largest Y_obs)
-#                 nstart = 1 # make sure some starting points are there to prevent run away searches
-               
-                
+#                 nbest = 3 # add the best points seen so far (largest Y_obs)
+#                 nstart = 2 # make sure some starting points are there to prevent run away searches
+                nbest = 1 # add the best points seen so far (largest Y_obs)
+                nstart = 1 # make sure some starting points are there to prevent run away searches
+
+
+
                 yobs = np.array([y[0][0] for y in self.Y_obs])
                 isearch = yobs.argsort()[-nbest:]
                 for i in range(min(nstart,len(self.Y_obs))): #
@@ -395,21 +405,23 @@ class BayesOpt:
 
                 v0s = None
                 
-                
+
                 for i in isearch:
-                    
+
                     vs = parallelgridsearch(aqfcn,self.X_obs[i],self.searchBoundScaleFactor * 0.6*self.lengthscales,fargs,neval,nkeep)
-                   
+
                     if type(v0s) == type(None):
                         v0s = copy.copy(vs)
                     else:
                         v0s = np.vstack((v0s,vs))
+
 
                 v0sort = v0s[:,-1].argsort()[:nkeep] # keep the nlargest
                 v0s = v0s[v0sort]
                 
                 x0s = v0s[:,:-1] # for later testing if the minimize results are better than the best starting point
                 v0best = v0s[0]
+
                 
                 
 
@@ -426,10 +438,13 @@ class BayesOpt:
             else: # single-processing
 
                 if basinhoppingQ:
-                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':(self.model, y_best, self.acq_func[1], alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
+                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,
+                            'args':(self.model, y_best, self.acq_func[1], alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
 
                 else:
-                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], alpha), method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
+                    # ToDo: this doesn't seem to be working. get 'ValueError: `f0` passed has more than 1 dimension.'
+                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], alpha),
+                                   method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
 
                 res = res.x
                 

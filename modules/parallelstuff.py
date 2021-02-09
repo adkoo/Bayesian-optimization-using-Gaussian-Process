@@ -360,7 +360,7 @@ try:
         x0s = np.sqrt(2)*erfinv(-1+2*x0s) # normal in all dimensions
         x0s = np.transpose(np.array(lengths,ndmin=2).T * x0s.T) # scale each dimension by it's lenghth scale
         x0s = x0s + x0 # shift to recenter
-        
+
         # arguments to loop over
         # Each process will get a queue to put its result in it
         args = [(f,x,fargs) for x in x0s]
@@ -382,7 +382,7 @@ try:
         if nrun % nprocs:
             nbatch += 1
         res = []
-        
+
         # Each process will get a queue to put its result in it
         queues = [mp.Queue() for p in range(nprocs)]
 
@@ -392,19 +392,16 @@ try:
             while True:
                 try:
                     procs = []
-                    
                     ilow = b*nprocs
                     ihigh = min(nrun,(b+1)*nprocs)
-                        
-                    #print 'launching processes'
+                    #print 'launching processes
+                    print('two')
 
                     for i in range(ilow, ihigh):
-                        p = mp.Process(
-                                target=worker,
-                                args=args[i]+tuple([queues[i-ilow]]))
+                        p = mp.Process(target=worker, args=args[i]+tuple([queues[i-ilow]]))
                         procs.append(p)
                         p.start()
-                        
+
                     #print 'collecting results'
                         
                     if len(res):
@@ -424,13 +421,14 @@ try:
                         del p # remove the multiprocessing.Process
                         
                     #print 'done with batch ', b+1, ' of ', nbatch
-                    
+
                     break # made it this far so break out of the while loop
                 
+
                 except Exception as e:
                     print 'ding'
                     print(e)
-                    time.sleep(recovery_sleep_time_seconds) # wait a bit for processes to close before trying again
+
 
         ## return nkeep smallest values
         #res = np.array(res)
