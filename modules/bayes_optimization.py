@@ -67,7 +67,7 @@ try:
 except:
     basinhoppingQ = False
 
-UseMultiProcessing = False
+UseMultiProcessing = True
 if UseMultiProcessing:
     from .parallelstuff import *
     # from parallelstuff import *

@@ -1,9 +1,9 @@
 # -*- coding: iso-8859-1 -*-
 import numpy as np
 import pickle
-from XXXXX import *
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel as Ck, WhiteKernel
+# from XXXXX import *
+# from sklearn.gaussian_process import GaussianProcessRegressor
+# from sklearn.gaussian_process.kernels import RBF, ConstantKernel as Ck, WhiteKernel
 
 class machine_interface:
     def __init__(self, dev_ids, start_point = None): 
@@ -29,4 +29,3 @@ class machine_interface:
         objective_state = self.BeamWidthObjective(self.x[0][0]) #BeamWidthObjective.py (in machine_interface folder)
         return np.array(self.x, ndmin = 2), np.array([[objective_state]])
 
-    

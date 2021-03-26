@@ -37,7 +37,7 @@ try:
         #print 'worker: margs = ',margs
         res = minimize(f, x0, args = fargs, **margs)
         #return [res.x, res.fun]
-        out_q.put([[res.x, res.fun[0][0]]])
+        out_q.put([[res.x, res.fun]])
 
     # parallelize minimizations using different starting positions using multiprocessing, scipy.optimize.minimize
     def parallelminimize(f,x0s,fargs,margs,v0best=None,relative_bounds=None):
@@ -125,7 +125,7 @@ try:
                     print(e)
                     time.sleep(recovery_sleep_time_seconds) # wait a bit for processes to close before trying again
             
-        res = np.array(res)
+        res = np.array(res,dtype='object')
         #print 'res = ', res
         res = res[res[:,1]==np.min(res[:,-1])][0]
         #print 'res = ', res
@@ -336,7 +336,7 @@ def parallelmap2(f,fargslist,hostlist=None):
 def eworker(f,x,fargs,out_q):
     # worker invoked in a process puts the results in the output queue out_q
     res = f(x, *fargs)
-    out_q.put(np.hstack((x, res[0][0])))
+    out_q.put(np.hstack((x, res)))
 
 # eval function over a range of initial points neval and return the nkeep lowest function evals
 def parallelgridsearch(f,x0,lengths,fargs,neval,nkeep):

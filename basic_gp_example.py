@@ -68,15 +68,14 @@ for i in range(5):
 #     plt.clear()
     
     Obj_state_s.append(mi.getState()[1][0])
-    # f = plt.figure(figsize=(20,3))
-    # ax = f.add_subplot(121)
-    # ax2 = f.add_subplot(122)
-    # ax.set_ylabel('Quads',fontsize=12)
-    # ax.plot(opt.X_obs)
-    # ax2.set_ylabel('Obj_state_s',fontsize=12)
-    # ax2.plot(Obj_state_s)
-    # plt.show(); plt.pause(1);
-#     time.sleep(2)
+    f = plt.figure(figsize=(20,3))
+    ax = f.add_subplot(121)
+    ax2 = f.add_subplot(122)
+    ax.set_ylabel('Quads',fontsize=12)
+    ax.plot(opt.X_obs)
+    ax2.set_ylabel('Obj_state_s',fontsize=12)
+    ax2.plot(Obj_state_s)
+    plt.show()
     
     opt.OptIter()
     time.sleep(acquisition_delay)
