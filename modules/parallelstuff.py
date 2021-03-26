@@ -426,7 +426,6 @@ try:
                 
 
                 except Exception as e:
-                    print 'ding'
                     print(e)
 
 

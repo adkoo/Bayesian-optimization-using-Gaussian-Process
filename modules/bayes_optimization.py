@@ -72,7 +72,7 @@ try:
     multiprocessingQ = True
     basinhoppingQ = False
 except:
-    print (f'failed to import parallelstuff; throwing error again:')
+    # print (f'failed to import parallelstuff; throwing error again:')
     basinhoppingQ = False
     multiprocessingQ = False
 import time
