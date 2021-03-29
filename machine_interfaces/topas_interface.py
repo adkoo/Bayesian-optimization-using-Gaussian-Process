@@ -1,15 +1,15 @@
 # -*- coding: iso-8859-1 -*-
 import numpy as np
 import pickle
-
 from scipy.optimize import minimize
-from scipy.optimize import fmin
 import subprocess
 import sys, os
 from pathlib import Path
 import logging
-import re
 from matplotlib import pyplot as plt
+import numpy as np
+
+
 
 
 ## add my PhaserGeom Repository to path:
@@ -167,7 +167,7 @@ class SingleChannelOptimiser:
                                                 ParametricVariable=ParameterString,
                                                 BremPhaseSpaceLocation=self.BremPSlocation,
                                                 WT_ScoringFieldSize=self.TargetBeamWidth * 3,
-                                                Nthreads=self.Nthreads)
+                                                Nthreads=self.Nthreads,GenerateScripts=False)
 
     def RunTopasModel(self):
         """
@@ -378,6 +378,68 @@ class SingleChannelOptimiser:
         # fmin(self.BeamletWidth, self.StartingValues, maxiter=self.MaxItterations,
         #               maxfun=self.MaxItterations, xtol=0.1, ftol=1, initial_simplex=isim,
         #               disp=True, full_output=True)
+
+
+class spear_sim_interface:
+    def __init__(self, dev_ids, precision_matrix=None, start_point=None):
+
+        # setup spear simulation enviroment
+        self.mlab = matlabThread()
+        self.mlab.run()
+        self.mlab.mlabinterface.eval('clearvars')  # clear variables
+        self.mlab.mlabinterface.eval('setpathspear3')  # set
+        self.mlab.mlabinterface.eval('spear_sim_run')
+        print('set spear3 simulation successfully!  ')
+
+        self.pvs = np.array(dev_ids)
+        self.name = 'spear_sim_interface'
+        if type(start_point) == type(None):
+            self.x = np.array(np.zeros(len(self.pvs)), ndmin=2)
+        else:
+            self.x = np.array(start_point, ndmin=2)
+        if type(precision_matrix) == type(None):
+            self.precision_matrix = np.eye(len(self.pvs))
+        else:
+            self.precision_matrix = precision_matrix
+
+        self.noise_std = 0.0  # FIX ME! this is the g_noise variable in the matlab sim
+
+        self.ratio = 0.00245246  # current = SkewK_LOCO/0.00245246;
+
+    def setX(self, x_new):
+        self.x = np.array(x_new)  # this is in machine units [-30,30] mA
+        self.x_sim = self.x / 60 + 0.5  # Multiply by ratio = 0.00245246 to convert to gradient in the range (-0.1,0.1) [m**-2] and normalize between 0 to 1 for the simulation
+        self.mlab.mlabinterface.workspace.x0 = np.array(np.array(self.x_sim).flatten(), ndmin=2)
+
+    #         print ('self.x',self.x)
+    #         print ('self.x_sim', self.x_sim)
+    #         print ('self.mlab.mlabinterface.workspace.x0 ',self.mlab.mlabinterface.workspace.x0 )
+
+    def getState(self):
+        self.x_sim = self.x / 60 + 0.5  # simulation quads range is between [0,1]
+        self.mlab.mlabinterface.workspace.x0 = np.array(np.array(self.x_sim).flatten(), ndmin=2)
+        self.mlab.mlabinterface.eval('obj = spear_sim_obj_median(x0)')  # spear_sim_func
+        self.objective_state0 = - self.mlab.mlabinterface.workspace.obj  # + self.noise_std * np.random.randn()  # we want to maximuze, so take neg of objective
+        objective_state = self.objective_state0 + self.noise_std * np.random.randn()  # we want to maximuze, so take neg of objective
+        print('current state: ', np.array(self.x, ndmin=2), np.array([[objective_state]]))
+
+        return np.array(self.x, ndmin=2), np.array([[objective_state]])
+
+    def getState0(self):
+        return np.array(self.objective_state0)
+
+    def get_value(self, device):
+        index = np.arange(0, len(self.pvs), 1)[np.array(self.pvs) == device]
+        return self.x[-1][index][0]
+
+
+class matlabThread(QtCore.QThread):
+    def __init__(self, parent=None):
+        QtCore.QThread.__init__(self, parent)
+
+    def run(self):
+        self.mlabinterface = matlab_wrapper.MatlabSession()
+
 
 
 if __name__ == '__main__':

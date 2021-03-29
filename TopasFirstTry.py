@@ -22,7 +22,7 @@ from modules.OnlineGP import OGP
 import numpy as np
 import importlib
 # mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
-import machine_interfaces.machine_interface_example as mi_module
+import machine_interfaces.topas_interface as mi_module
 import time
 import matplotlib.pyplot as plt
 # from IPython.display import clear_output
