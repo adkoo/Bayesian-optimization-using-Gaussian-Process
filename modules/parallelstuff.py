@@ -8,8 +8,11 @@ import numpy as np
 import multiprocessing as mp
 import copy
 import time
+<<<<<<< HEAD
 from scipy.special import erfinv
 from .chaospy_sequences import create_hammersley_samples
+=======
+>>>>>>> master
 
 # handle 'IOError: [Errno 4] Interrupted system call' errors from multiprocessing.Queue.get
 #https://stackoverflow.com/questions/14136195/what-is-the-proper-way-to-handle-in-python-ioerror-errno-4-interrupted-syst
@@ -330,6 +333,7 @@ def parallelmap2(f,fargslist,hostlist=None):
     # sort by argument order passed (seems presorted but just in case)
     #res = res[res[:,0].argsort()] # this doesn't work in genreal; must mix back in xs for slicing
 
+<<<<<<< HEAD
     return res
 
 
@@ -358,11 +362,72 @@ def parallelgridsearch(f,x0,lengths,fargs,neval,nkeep):
     x0s = np.sqrt(2)*erfinv(-1+2*x0s) # normal in all dimensions
     x0s = np.transpose(np.array(lengths,ndmin=2).T * x0s.T) # scale each dimension by it's lenghth scale
     x0s = x0s + x0 # shift to recenter
+=======
+    return res 
+    
+try:
+    
+    from scipy.special import erfinv
+    #from hammersley import hammersley
+    from .chaospy_sequences import create_hammersley_samples
+        
+    def eworker(f,x,fargs,out_q):
+        # worker invoked in a process puts the results in the output queue out_q
+        res = f(x, *fargs)
+        out_q.put(np.hstack((x, res[0][0])))
+
+    # eval function over a range of initial points neval and return the nkeep lowest function evals
+    def parallelgridsearch(f,x0,lengths,fargs,neval,nkeep):
+        # f is fcn to minimize
+        # x0 is center of the search
+        # lengths is an array of length scales
+        # fargs are arguments to pass to f
+        # neval is the number of points to evaluate the function on
+        # nkeep is the number of the neval points to keep
+        
+        if nkeep > neval: nkeep = neval
+        
+        # generate points to search
+        ndim = len(lengths)
+        #nevalpp = neval + 1
+        #x0s = np.array([hammersley(i,ndim,nevalpp) for i in range(1,nevalpp)]) # hammersley uniform in all dims
+        #x0s = np.vstack(parallelmap(hammersley, range(1,nevalpp), (ndim,nevalpp)))
+        x0s = create_hammersley_samples(order=neval, dim=ndim).T
+        x0s = np.sqrt(2)*erfinv(-1+2*x0s) # normal in all dimensions
+        x0s = np.transpose(np.array(lengths,ndmin=2).T * x0s.T) # scale each dimension by it's lenghth scale
+        x0s = x0s + x0 # shift to recenter
+
+        # arguments to loop over
+        # Each process will get a queue to put its result in it
+        args = [(f,x,fargs) for x in x0s]
+
+        # https://stackoverflow.com/questions/9786102/how-do-i-parallelize-a-simple-python-loop#9786225
+        # also could try concurrent futures
+    #    import multiprocessing
+    #    pool = multiprocessing.Pool()
+    #    res = np.array(pool.map(minimizeone, args))
+    #    res = np.array(pool.map(l, range(10)))
+        
+        # seems like this maybe be needed 
+        # https://stackoverflow.com/questions/37060091/multiprocessing-inside-function
+            
+        worker = eworker
+        nrun = neval
+        nprocs = int(mp.cpu_count())
+        nbatch = int(np.floor(nrun / nprocs))
+        if nrun % nprocs:
+            nbatch += 1
+        res = []
+
+        # Each process will get a queue to put its result in it
+        queues = [mp.Queue() for p in range(nprocs)]
+>>>>>>> master
 
     # arguments to loop over
     # Each process will get a queue to put its result in it
     args = [(f,x,fargs) for x in x0s]
 
+<<<<<<< HEAD
     # https://stackoverflow.com/questions/9786102/how-do-i-parallelize-a-simple-python-loop#9786225
     # also could try concurrent futures
 #    import multiprocessing
@@ -401,6 +466,49 @@ def parallelgridsearch(f,x0,lengths,fargs,neval,nkeep):
                         print('process failed to start')
 
                 #print 'collecting results'
+=======
+            # try running a batch until it works
+            while True:
+                try:
+                    procs = []
+                    ilow = b*nprocs
+                    ihigh = min(nrun,(b+1)*nprocs)
+                    #print 'launching processes
+                    print('two')
+
+                    for i in range(ilow, ihigh):
+                        p = mp.Process(target=worker, args=args[i]+tuple([queues[i-ilow]]))
+                        procs.append(p)
+                        p.start()
+
+                    #print 'collecting results'
+                        
+                    if len(res):
+                        for i in range(ilow, ihigh):
+                            res = np.vstack((res,my_queue_get(queues[i-ilow])))
+                    else:
+                        res = np.array(my_queue_get(queues[0]))
+                        for i in range(ilow+1, ihigh):
+                            res = np.vstack((res,my_queue_get(queues[i-ilow])))
+                        
+                    #print 'waiting for termination/cleanup'
+
+                    # waits for worker to finish
+                    for p in procs:
+                        p.join() # wait until close
+                        p.terminate() # send SIGTERM just in case
+                        del p # remove the multiprocessing.Process
+                        
+                    #print 'done with batch ', b+1, ' of ', nbatch
+
+                    break # made it this far so break out of the while loop
+                
+
+                except Exception as e:
+                    print 'ding'
+                    print(e)
+
+>>>>>>> master
 
                 if len(res):
 
@@ -451,3 +559,13 @@ def parallelgridsearch(f,x0,lengths,fargs,neval,nkeep):
     #return res[:,:-1], res[:,-1] # return just coords
 
 
+<<<<<<< HEAD
+=======
+        return res # return coords and fcn evals
+        #return res[:,:-1] # return just coords
+        #return res[:,:-1], res[:,-1] # return just coords
+    
+except:
+    print('parallelstuff - WARNING: Could not load parallelgridsearch.')
+    pass
+>>>>>>> master
