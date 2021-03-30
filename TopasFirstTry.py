@@ -22,7 +22,7 @@ from modules.OnlineGP import OGP
 import numpy as np
 import importlib
 # mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
-import machine_interfaces.machine_interface_example as mi_module
+import machine_interfaces.topas_interface as mi_module
 import time
 import matplotlib.pyplot as plt
 # from IPython.display import clear_output
@@ -68,7 +68,6 @@ for i in range(5):
 #     plt.clear()
     
     Obj_state_s.append(mi.getState()[1][0])
-<<<<<<< HEAD
     f = plt.figure(figsize=(20,3))
     ax = f.add_subplot(121)
     ax2 = f.add_subplot(122)
@@ -77,7 +76,7 @@ for i in range(5):
     ax2.set_ylabel('Obj_state_s',fontsize=12)
     ax2.plot(Obj_state_s)
     plt.show()
-
+    
     opt.OptIter()
     time.sleep(acquisition_delay)
     
