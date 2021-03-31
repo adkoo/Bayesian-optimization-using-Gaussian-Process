@@ -16,6 +16,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+import logging
 
 from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
@@ -23,81 +24,60 @@ import numpy as np
 import os,sys
 import importlib
 # mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
-import machine_interfaces.topas_interface as mi_module
+# import machine_interfaces.topas_interface as mi_module
 import time
 import matplotlib.pyplot as plt
 
 # Import the topas interface:
 try:
-    sys.path.append('../Phaser_Models')
-    import topas.BayesianOptimiser_MachineInterface.machine_interface as mi_module
+    sys.path.append(os.path.realpath('../Phaser_Models'))
+    from topas import BayesianOptimiser_MachineInterface as mi_module
 except:
+    logging.error(f'Failed to import the topas machine interface; probably you need to adjust the system path')
 
 # from IPython.display import clear_output
 
+if __name__ == '__main__':
+    BaseDirectory = os.path.expanduser("~") + '/Dropbox (Sydney Uni)/Projects/PhaserSims/topas'
+    SimulationName = 'BayesianOptimisationTest'
+    scan_params_filename = 'TopasOptimiserParams.npy'
+    saveResultsQ = False
+    #
+    #load the dict that contains the parameters for the scan (control pv list, starting settings, and gp hyperparams)
+    scan_params = np.load('params/'+scan_params_filename, allow_pickle=True).item()
 
-scan_params_filename = 'TopasOptimiserParams.npy'
-saveResultsQ = False
+    #how long to wait between acquisitions
+    acquisition_delay = scan_params['acquisition_delay']
 
-#load the dict that contains the parameters for the scan (control pv list, starting settings, and gp hyperparams)
-scan_params = np.load('params/'+scan_params_filename, allow_pickle=True).item()
+    #create the machine interface
+    dev_ids = ['dev_ids']
+    start_point = scan_params['start_point'] #if start_point is set to None, the optimizer will start from the current device settings.
+    mi = mi_module.machine_interface(scan_params, BaseDirectory, SimulationName) #an isotropic n-dimensional gaussian with amplitude=1, centered at the origin, plus gaussian background noise with std dev = 0.1
 
-#how long to wait between acquisitions
-acquisition_delay = scan_params['acquisition_delay']
+    #create the gp
+    ndim = len(scan_params['dev_ids'])
+    gp_precisionmat = scan_params['gp_precisionmat']
+    gp_amp = scan_params['gp_amp']
+    gp_noise = scan_params['gp_noise'] #std
+    hyps = [gp_precisionmat, np.log(gp_amp), np.log(gp_noise**2)] #format the hyperparams for the OGP
+    gp = OGP(ndim, hyps)
 
-#create the machine interface
-dev_ids = scan_params['dev_ids']
-start_point = scan_params['start_point'] #if start_point is set to None, the optimizer will start from the current device settings.
-mi = mi_module.machine_interface(dev_ids = dev_ids, start_point = start_point) #an isotropic n-dimensional gaussian with amplitude=1, centered at the origin, plus gaussian background noise with std dev = 0.1
+    #create the bayesian optimizer that will use the gp as the model to optimize the machine
+    opt = BayesOpt(gp, mi, acq_func="UCB", start_dev_vals = mi.x, dev_ids = scan_params['dev_ids'])
+    opt.ucb_params = scan_params['ucb_params'] #set the acquisition function parameters
 
-#create the gp
-ndim = len(dev_ids)
-gp_precisionmat = scan_params['gp_precisionmat']
-gp_amp = scan_params['gp_amp'] 
-gp_noise = scan_params['gp_noise'] #std
-hyps = [gp_precisionmat, np.log(gp_amp), np.log(gp_noise**2)] #format the hyperparams for the OGP
-gp = OGP(ndim, hyps)
+    #run the gp search for some number of steps
+    Obj_state_s=[]
 
-#create the bayesian optimizer that will use the gp as the model to optimize the machine 
-opt = BayesOpt(gp, mi, acq_func="UCB", start_dev_vals = mi.x, dev_ids = dev_ids)
-opt.ucb_params = scan_params['ucb_params'] #set the acquisition function parameters
+    for i in range(5):
+        print('iteration =', i)
+        print('current position:', mi.x, 'current objective value:', mi.getState()[1])
+        try:
+            Obj_state_s.append(mi.getState()[1][0])
+        except:
+            print('hello')
+        opt.OptIter()
+        time.sleep(acquisition_delay)
 
-#run the gp search for some number of steps
-Obj_state_s=[]
 
-for i in range(5):
-    print ('iteration =', i)
-    print ('current position:', mi.x, 'current objective value:', mi.getState()[1])
-        
-#     clear_output(wait=True)
-#     time.sleep(2)
-#     plt.clf()
-#     plt.cla()
-#     plt.clear()
-    
-    Obj_state_s.append(mi.getState()[1][0])
-    f = plt.figure(figsize=(20,3))
-    ax = f.add_subplot(121)
-    ax2 = f.add_subplot(122)
-    ax.set_ylabel('Quads',fontsize=12)
-    ax.plot(opt.X_obs)
-    ax2.set_ylabel('Obj_state_s',fontsize=12)
-    ax2.plot(Obj_state_s)
-    plt.show()
-    
-    opt.OptIter()
-    time.sleep(acquisition_delay)
-    
-    
-#save results if desired
-if saveResultsQ == True:
-    timestr = datetime.now().strftime('%Y-%m-%d-%H%M%S')
-    try: os.mkdir('saved_results')
-    except: pass
-    results = {}
-    results['scan_params'] = scan_params
-    results['xs'] = opt.X_obs
-    results['ys'] = np.array([y[0][0] for y in opt.Y_obs])
-    results['time'] = timestr
-    np.save('saved_results/scan_'+timestr, results)
 

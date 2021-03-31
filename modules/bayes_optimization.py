@@ -131,17 +131,17 @@ class BayesOpt:
         self.pvs = self.dev_ids
         self.pvs_ = [pv.replace(":","_") for pv in self.pvs]
 
-        try:
+        # try:
             # get initial state
-            print('Supposed to be grabbing initial machine state...')
-            (x_init, y_init) = self.getState()
-            print('x_init',x_init)
-            print('y_init',y_init)
-            self.X_obs = np.array(x_init)
-            self.Y_obs = [y_init]
-            self.current_x = np.array(np.array(x_init).flatten(), ndmin=2)
-        except:
-            print('BayesOpt - ERROR: Could not grab initial machine state')
+        print('Supposed to be grabbing initial machine state...')
+        (x_init, y_init) = self.getState()
+        print('x_init',x_init)
+        print('y_init',y_init)
+        self.X_obs = np.array(x_init)
+        self.Y_obs = [y_init]
+        self.current_x = np.array(np.array(x_init).flatten(), ndmin=2)
+        # except:
+        #     print('BayesOpt - ERROR: Could not grab initial machine state')
         
         # calculate length scales
         try:
@@ -169,14 +169,15 @@ class BayesOpt:
         print('Using prior mean parameters of ', self.model.prmeanp)
         
     def getState(self):
-        #print('>>>>>>>> getState') 
-        #x_vals = [self.mi.get_value(d) for d in self.dev_ids]
-        #print('>>>>>>>>>>>>>>>>>>>> invoking get_penalty')
-        #y_val = -self.target_func.get_penalty()
-        #print(y_val)
-        #print('>>>>>>>>>>>>> getState returning')
+        # print('>>>>>>>> getState')
+        # x_vals = [self.mi.get_value(d) for d in self.dev_ids]
+        # print('>>>>>>>>>>>>>>>>>>>> invoking get_penalty')
+        # y_val = -self.target_func.get_penalty()
+        # print(y_val)
+        # print('>>>>>>>>>>>>> getState returning')
 
-        #Note: Dylan edited this function on 2019-08-30 for use with his simple_machine_interface class by commenting out the lines above and replacing them with the line immediately below
+        # Note: Dylan edited this function on 2019-08-30 for use with his simple_machine_interface class
+        # by commenting out the lines above and replacing them with the line immediately below
         x_vals, y_val = self.mi.getState()
         return x_vals, y_val
 
