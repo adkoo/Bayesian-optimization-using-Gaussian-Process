@@ -66,24 +66,14 @@ try:
     basinhoppingQ = True
 except:
     basinhoppingQ = False
-<<<<<<< HEAD
-
 UseMultiProcessing = True
 if UseMultiProcessing:
-=======
-try:
->>>>>>> master
     from .parallelstuff import *
     # from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
-<<<<<<< HEAD
 else:
     print(f'failed to import parallelstuff')
-=======
-except:
-    print (f'failed to import parallelstuff; throwing error again:')
->>>>>>> master
     basinhoppingQ = False
     multiprocessingQ = False
 
@@ -241,10 +231,6 @@ class BayesOpt:
 
     def OptIter(self,pause=0):
         # runs the optimizer for one iteration
-<<<<<<< HEAD
-=======
-        print('one')
->>>>>>> master
         # get next point to try using acquisition function
         x_next = self.acquire()
         print('two')
@@ -262,10 +248,6 @@ class BayesOpt:
         # add new entry to observed data
         self.X_obs = np.concatenate((self.X_obs,x_new),axis=0)
         self.Y_obs.append(y_new)
-<<<<<<< HEAD
-=======
-        print('four')
->>>>>>> master
         # update the model (may want to add noise if using testEI)
         self.model.update(x_new, y_new)# + .5*np.random.randn())
 

@@ -7,7 +7,7 @@
 
 import numpy as np
 
-filename = 'scan_params_JOE.npy'
+filename = 'TopasOptimiserParams.npy'
 
 my_scan_params = {}
 
@@ -15,7 +15,7 @@ my_scan_params = {}
 my_scan_params['acquisition_delay'] = 0.0 
 
 #device control keys for machine, list or 1d-array
-my_scan_params['dev_ids'] = ['sim_dev_0', 'sim_dev_1', 'sim_dev_2', 'sim_dev_3'] 
+my_scan_params['dev_ids'] = ['UpStreamHoleSize']
 
 #gp amplitude parameter, float
 my_scan_params['gp_amp'] = 1.0
@@ -24,15 +24,12 @@ my_scan_params['gp_amp'] = 1.0
 my_scan_params['gp_noise'] = 0.01 
 
 #gp precision matrix, 2d-array of shape ndim x ndim where ndim = len(my_scan_params['dev_ids'])
-my_scan_params['gp_precisionmat'] = np.array([ [0.5, 0, 0, 0],  
-                                               [0, 0.5, 0, 0],
-                                               [0, 0, 0.5, 0],
-                                               [0, 0, 0, 0.5]  ])
+my_scan_params['gp_precisionmat'] = np.array([ [0.5]  ])
 
 #control device settings from which to start the scan, 1d-array of len(ndim)
-my_scan_params['start_point'] = np.array([ 0., 0., 0., 0.]) 
+my_scan_params['start_point'] = np.array([0.5])
 
 #UCB acquisition function parameters in order [nu, delta], list of length 2. If delta is None, ucb will do a fixed tail search using nu as a zscore
 my_scan_params['ucb_params'] = [1.0, None] 
 
-np.save('params/'+filename, my_scan_params)
+np.save('../params/'+filename, my_scan_params)

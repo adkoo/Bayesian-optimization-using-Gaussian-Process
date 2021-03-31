@@ -20,6 +20,7 @@ from __future__ import print_function
 from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
 import numpy as np
+import os
 import importlib
 # mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
 import machine_interfaces.machine_interface_example as mi_module
@@ -68,7 +69,6 @@ for i in range(5):
 #     plt.clear()
     
     Obj_state_s.append(mi.getState()[1][0])
-<<<<<<< HEAD
     f = plt.figure(figsize=(20,3))
     ax = f.add_subplot(121)
     ax2 = f.add_subplot(122)
@@ -85,8 +85,10 @@ for i in range(5):
 #save results if desired
 if saveResultsQ == True:
     timestr = datetime.now().strftime('%Y-%m-%d-%H%M%S')
-    try: os.mkdir('saved_results')
-    except: pass
+    try:
+        os.mkdir('saved_results')
+    except:
+        pass
     results = {}
     results['scan_params'] = scan_params
     results['xs'] = opt.X_obs

@@ -20,15 +20,23 @@ from __future__ import print_function
 from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
 import numpy as np
+import os,sys
 import importlib
 # mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
 import machine_interfaces.topas_interface as mi_module
 import time
 import matplotlib.pyplot as plt
+
+# Import the topas interface:
+try:
+    sys.path.append('../Phaser_Models')
+    import topas.BayesianOptimiser_MachineInterface.machine_interface as mi_module
+except:
+
 # from IPython.display import clear_output
 
-scan_params_filename = 'y_minus_x_gauss_fit.npy'
-scan_params_filename = 'my_scan_params.npy'
+
+scan_params_filename = 'TopasOptimiserParams.npy'
 saveResultsQ = False
 
 #load the dict that contains the parameters for the scan (control pv list, starting settings, and gp hyperparams)
