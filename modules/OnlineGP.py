@@ -69,6 +69,7 @@ import numpy as np
 import numbers
 from numpy.linalg import solve, inv
 import collections
+import sys
 
 class OGP(object):
     def __init__(self, dim, hyperparams, covar='RBF_ARD', maxBV=200,
@@ -188,15 +189,6 @@ class OGP(object):
         k = self.computeCov(x_in, x_in, is_self=True)
         gpMean = np.dot(k_x, self.alpha)
         gpVar = k + np.dot(k_x,np.dot(self.C,k_x.transpose()))
-
- #        print(('OGP: BV = ',self.BV))
- #        print(('OGP: C = ',self.C))
- #        print(('OGP: alpha = ',self.alpha))
- #        print(('OGP: x_in = ',x_in))
- #        print(('OGP: k_x = ',k_x))
- #        print(('OGP: k = ',k))
- #        print(('OGP: gpMean, gpVar = ',gpMean, gpVar))
-
         # combine with prior and return posterior PDF
         if(isinstance(self.prmean, collections.Callable) and isinstance(self.prvar, collections.Callable)): # we have a prior mean & variance
             priorMean = self.priorMean(x_in)
@@ -470,15 +462,20 @@ class OGP(object):
             b = self.precisionMatrix
 
         # save duplicate computations
-        bdotx1T = np.array([np.dot(b,x.transpose()).transpose() for x in x1])
-        bdotx2T = np.array([np.dot(b,x.transpose()).transpose() for x in x2])
+        try
+            bdotx1T = np.array([np.dot(b,x.transpose()).transpose() for x in x1])
+            bdotx2T = np.array([np.dot(b,x.transpose()).transpose() for x in x2])
+        except:
+            print('hgagag')
 
         x1_sum_sq = np.reshape(np.sum(x1 * bdotx1T, axis=1), (n1,1))
         x2_sum_sq = np.reshape(np.sum(x2 * bdotx2T, axis=1), (1,n2))
 
+
         K = -2 * np.dot(x1, bdotx2T.transpose())
         K = K + x1_sum_sq + x2_sum_sq
         K = coeff * np.exp(-0.5 * K)
+
 
         return K
 

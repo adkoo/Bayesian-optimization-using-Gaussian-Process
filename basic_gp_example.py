@@ -20,6 +20,7 @@ from __future__ import print_function
 from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
 import numpy as np
+import os
 import importlib
 # mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
 import machine_interfaces.machine_interface_example as mi_module
@@ -57,12 +58,9 @@ opt.ucb_params = scan_params['ucb_params'] #set the acquisition function paramet
 #run the gp search for some number of steps
 Obj_state_s=[]
 
-for i in range(5):
+for i in range(1):
     print ('iteration =', i)
     print ('current position:', mi.x, 'current objective value:', mi.getState()[1])
-        
-
-    
     Obj_state_s.append(mi.getState()[1][0])
     f = plt.figure(figsize=(20,3))
     ax = f.add_subplot(121)
@@ -72,8 +70,6 @@ for i in range(5):
     ax2.set_ylabel('Obj_state_s',fontsize=12)
     ax2.plot(Obj_state_s)
     plt.show()
-    time.sleep(2)
-    print ('got this far')
     opt.OptIter()
     time.sleep(acquisition_delay)
     
@@ -81,8 +77,10 @@ for i in range(5):
 #save results if desired
 if saveResultsQ == True:
     timestr = datetime.now().strftime('%Y-%m-%d-%H%M%S')
-    try: os.mkdir('saved_results')
-    except: pass
+    try:
+        os.mkdir('saved_results')
+    except:
+        pass
     results = {}
     results['scan_params'] = scan_params
     results['xs'] = opt.X_obs

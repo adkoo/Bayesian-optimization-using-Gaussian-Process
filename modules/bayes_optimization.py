@@ -61,22 +61,26 @@ from scipy.stats import norm
 from scipy.optimize import minimize
 import sys,os
 from scipy.optimize import approx_fprime
+import time
+import inspect
+from copy import deepcopy
 try:
     from scipy.optimize import basinhopping
     basinhoppingQ = True
 except:
     basinhoppingQ = False
-try:
+UseMultiProcessing = True
+if UseMultiProcessing:
     from .parallelstuff import *
     # from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
-except:
-    # print (f'failed to import parallelstuff; throwing error again:')
+
+else:
+    print(f'failed to import parallelstuff')
     basinhoppingQ = False
     multiprocessingQ = False
-import time
-from copy import deepcopy
+
 
 def normVector(nparray):
     return nparray / np.linalg.norm(nparray)
@@ -95,10 +99,9 @@ class BayesOpt:
         self.iter_bound = iter_bound 
         self.prior_data = prior_data # for seeding the GP with data acquired by another optimizer
         self.target_func = target_func
-        print('target_func = ', target_func)
         try: 
             self.mi = self.target_func.mi
-            print('********* BO - self.mi = self.target_func.mi wORKED!')
+            print('********* BO - self.mi = self.target_func.mi WORKED!')
         except:
             self.mi = self.target_func
             print('********* BO - self.mi = self.target_func wORKED!')
@@ -131,7 +134,7 @@ class BayesOpt:
 
         try:
             # get initial state
-            print('Supposed to be grabbing initial machine state...')
+            print('Attempting to grab initial machine state...')
             (x_init, y_init) = self.getState()
             print('x_init',x_init)
             print('y_init',y_init)
@@ -167,14 +170,15 @@ class BayesOpt:
         print('Using prior mean parameters of ', self.model.prmeanp)
         
     def getState(self):
-        #print('>>>>>>>> getState') 
-        #x_vals = [self.mi.get_value(d) for d in self.dev_ids]
-        #print('>>>>>>>>>>>>>>>>>>>> invoking get_penalty')
-        #y_val = -self.target_func.get_penalty()
-        #print(y_val)
-        #print('>>>>>>>>>>>>> getState returning')
+        # print('>>>>>>>> getState')
+        # x_vals = [self.mi.get_value(d) for d in self.dev_ids]
+        # print('>>>>>>>>>>>>>>>>>>>> invoking get_penalty')
+        # y_val = -self.target_func.get_penalty()
+        # print(y_val)
+        # print('>>>>>>>>>>>>> getState returning')
 
-        #Note: Dylan edited this function on 2019-08-30 for use with his simple_machine_interface class by commenting out the lines above and replacing them with the line immediately below
+        # Note: Dylan edited this function on 2019-08-30 for use with his simple_machine_interface class
+        # by commenting out the lines above and replacing them with the line immediately below
         x_vals, y_val = self.mi.getState()
         return x_vals, y_val
 
@@ -229,7 +233,6 @@ class BayesOpt:
 
     def OptIter(self,pause=0):
         # runs the optimizer for one iteration
-        print('one')
         # get next point to try using acquisition function
         x_next = self.acquire()
         print('two')
@@ -247,7 +250,6 @@ class BayesOpt:
         # add new entry to observed data
         self.X_obs = np.concatenate((self.X_obs,x_new),axis=0)
         self.Y_obs.append(y_new)
-        print('four')
         # update the model (may want to add noise if using testEI)
         self.model.update(x_new, y_new)# + .5*np.random.randn())
 
@@ -407,7 +409,6 @@ class BayesOpt:
                 
 
                 for i in isearch:
-
                     vs = parallelgridsearch(aqfcn,self.X_obs[i],self.searchBoundScaleFactor * 0.6*self.lengthscales,fargs,neval,nkeep)
 
                     if type(v0s) == type(None):
@@ -421,9 +422,6 @@ class BayesOpt:
                 
                 x0s = v0s[:,:-1] # for later testing if the minimize results are better than the best starting point
                 v0best = v0s[0]
-
-                
-                
 
                 if basinhoppingQ:
                     # use basinhopping
@@ -506,8 +504,16 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
     delta: delta in the tutorial (see above)
     """
 
-    if nsteps==0: nsteps += 1
+    print(f'negUCB: x_new: {x_new}')
+
+    if np.isinf(x_new[0]):
+        print('oh')
+
+    if nsteps==0:
+        nsteps += 1
+
     (y_mean, y_var) = model.predict(np.array(x_new,ndmin=2))
+
 
     if delta is None:
         GPUCB = y_mean + nu * np.sqrt(y_var)
@@ -515,19 +521,5 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
         tau = 2.*np.log(nsteps**(0.5*ndim+2.)*(np.pi**2.)/3./delta)
         GPUCB = y_mean + np.sqrt(nu * tau * y_var)
 
-    return -GPUCB
+    return float(-GPUCB)
 
-# old version
-#def negUCB(x_new, model, mult):
-    #"""
-    #The upper confidence bound acquisition function. Currently only partially
-    #implemented. The mult parameter specifies how wide the confidence bound
-    #should be, and there currently is no way to compute this parameter. This
-    #acquisition function shouldn't be used until there is a proper mult.
-    #"""
-    #(y_new, var) = model.predict(np.array(x_new,ndmin=2))
-
-    #UCB = y_new + mult * np.sqrt(var)
-    #return -UCB
-
-# Thompson sampling
