@@ -16,14 +16,14 @@ def CheckScanParams(paramsfile):
     """
     Add in error handling here to check for correct dimensionality of various parameters
 
-    :param paramsfile:
-    :return:
+    :param paramsfile: the params file generated in this script
+    :return: None
     """
 
-    # check for correction dimensionality of gp_precisionmatrix:
+    # check for correct dimensionality of gp_precisionmatrix:
     if not paramsfile['gp_precisionmat'].shape[1] == len(my_scan_params['dev_ids']):
         logger.error('incorrect number of parameters detected in gp_precisionmat')
-
+    # check for correct dimensionality of start_point:
     if not len(my_scan_params['start_point'])  == len(my_scan_params['dev_ids']):
         logger.error('Number of device ids and starting parameters dont match')
 
@@ -34,7 +34,7 @@ filename = 'TopasOptimiserParams.npy'
 my_scan_params = {}
 
 #number of seconds to wait in between target function evaluations, float
-my_scan_params['acquisition_delay'] = 0.0 
+my_scan_params['acquisition_delay'] = 2.0
 
 #device control keys for machine, list or 1d-array
 my_scan_params['dev_ids'] = ['UpStreamHoleSize','DownStreamHoleSize']

@@ -462,11 +462,9 @@ class OGP(object):
             b = self.precisionMatrix
 
         # save duplicate computations
-        try
-            bdotx1T = np.array([np.dot(b,x.transpose()).transpose() for x in x1])
-            bdotx2T = np.array([np.dot(b,x.transpose()).transpose() for x in x2])
-        except:
-            print('hgagag')
+
+        bdotx1T = np.array([np.dot(b,x.transpose()).transpose() for x in x1])
+        bdotx2T = np.array([np.dot(b,x.transpose()).transpose() for x in x2])
 
         x1_sum_sq = np.reshape(np.sum(x1 * bdotx1T, axis=1), (n1,1))
         x2_sum_sq = np.reshape(np.sum(x2 * bdotx2T, axis=1), (1,n2))

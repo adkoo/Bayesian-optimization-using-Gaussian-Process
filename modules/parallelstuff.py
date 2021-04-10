@@ -46,7 +46,6 @@ try:
         # return [res.x, res.fun]
         out_q.put([[res.x, res.fun]])
 
-
     # parallelize minimizations using different starting positions using multiprocessing, scipy.optimize.minimize
     def parallelminimize(f, x0s, fargs, margs, v0best=None, relative_bounds=None):
         # f is fcn to minimize
@@ -371,8 +370,7 @@ def parallelgridsearch(f, x0, lengths, fargs, neval, nkeep):
     # x0s = np.vstack(parallelmap(hammersley, range(1,nevalpp), (ndim,nevalpp)))
     x0s = create_hammersley_samples(order=neval, dim=ndim).T
     x0s = np.sqrt(2) * erfinv(-1 + 2 * x0s)  # normal in all dimensions
-    x0s[np.isinf(x0s)] = float("NaN")
-    x0s = np.transpose(np.array(lengths, ndmin=2).T * x0s.T)  # scale each dimension by it's lenghth scale
+    x0s = np.transpose(np.array(lengths, ndmin=2).T * x0s.T)  # scale each dimension by it's length scale
     x0s = x0s + x0  # shift to recenter
 
     # arguments to loop over

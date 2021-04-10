@@ -362,7 +362,7 @@ With custom number base::
     [[ 0.2  0.4  0.6  0.8]
      [ 0.6  0.2  0.8  0.4]]
 """
-import numpy
+
 
 
 def create_korobov_samples(order, dim, base=17797):

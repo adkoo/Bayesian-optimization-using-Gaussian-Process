@@ -75,7 +75,6 @@ if UseMultiProcessing:
     # from parallelstuff import *
     multiprocessingQ = True
     basinhoppingQ = False
-
 else:
     print(f'failed to import parallelstuff')
     basinhoppingQ = False
@@ -503,11 +502,6 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
     nu: nu in the tutorial (see above)
     delta: delta in the tutorial (see above)
     """
-
-    print(f'negUCB: x_new: {x_new}')
-
-    if np.isinf(x_new[0]):
-        print('oh')
 
     if nsteps==0:
         nsteps += 1

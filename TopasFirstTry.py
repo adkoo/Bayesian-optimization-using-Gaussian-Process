@@ -71,7 +71,7 @@ if __name__ == '__main__':
     #run the gp search for some number of steps
     Obj_state_s=[]
 
-    for i in range(1):
+    for i in range(5):
         print('iteration =', i)
         print('current position:', mi.x, 'current objective value:', mi.getState()[1][0])
         try:
