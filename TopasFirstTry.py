@@ -55,7 +55,7 @@ if __name__ == '__main__':
     #create the machine interface
     dev_ids = ['dev_ids']
     start_point = scan_params['start_point'] #if start_point is set to None, the optimizer will start from the current device settings.
-    mi = mi_module.machine_interface(scan_params, BaseDirectory, SimulationName,debug=True) #an isotropic n-dimensional gaussian with amplitude=1, centered at the origin, plus gaussian background noise with std dev = 0.1
+    mi = mi_module.machine_interface(scan_params, BaseDirectory, SimulationName,debug=False) #an isotropic n-dimensional gaussian with amplitude=1, centered at the origin, plus gaussian background noise with std dev = 0.1
 
     #create the gp
     ndim = len(scan_params['dev_ids'])
