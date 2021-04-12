@@ -5,8 +5,6 @@ Bayesian Optimization using Gaussian Process to optimize an objective function w
 For the most basic usage, run basic_gp_example.py, which is an example code to run as-is without any input arguments.
 For an interactive version, check out the Jupyter notebook 'Plug_and_play-basic example.ipynb'
 
-*NOTE:* This code is written for python 2.7
-
 ## 
 
 This tool was developed primarily for particle accelerators with various machine interfaces. 
