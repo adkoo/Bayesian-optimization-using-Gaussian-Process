@@ -17,6 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import logging
+logging.basicConfig(level=logging.WARN)
 
 from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
