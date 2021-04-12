@@ -37,7 +37,18 @@ my_scan_params = {}
 my_scan_params['acquisition_delay'] = 2.0
 
 #device control keys for machine, list or 1d-array
-my_scan_params['dev_ids'] = ['UpStreamHoleSize','DownStreamHoleSize']
+my_scan_params['dev_ids'] = ['coll_UpStreamHoleSize', 'BeamletSizeAtIso', 'coll_CollimatorThickness']
+
+#control device settings from which to start the scan, 1d-array of len(ndim)
+my_scan_params['start_point'] = np.array([1.0, 2.0, 250])
+
+# Add in bounds (may not always be used)
+my_scan_params['UpperBounds'] = np.array([2, 7, 350])
+my_scan_params['LowerBounds'] = np.array([0.5, 1, 150])
+
+#gp precision matrix, 2d-array of shape ndim x ndim where ndim = len(my_scan_params['dev_ids'])
+my_scan_params['gp_precisionmat'] = np.array([ [0.5, 0.5, 0.5]  ])
+
 
 #gp amplitude parameter, float
 my_scan_params['gp_amp'] = 1.0
@@ -45,11 +56,9 @@ my_scan_params['gp_amp'] = 1.0
 #gp noise std dev parameter, float 
 my_scan_params['gp_noise'] = 0.01 
 
-#gp precision matrix, 2d-array of shape ndim x ndim where ndim = len(my_scan_params['dev_ids'])
-my_scan_params['gp_precisionmat'] = np.array([ [0.5, 0.5]  ])
 
-#control device settings from which to start the scan, 1d-array of len(ndim)
-my_scan_params['start_point'] = np.array([1.0, 2.0])
+
+
 
 #UCB acquisition function parameters in order [nu, delta], list of length 2. If delta is None, ucb will do a fixed tail search using nu as a zscore
 my_scan_params['ucb_params'] = [1.0, None]
