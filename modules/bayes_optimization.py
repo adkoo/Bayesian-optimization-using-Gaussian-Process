@@ -378,11 +378,11 @@ class BayesOpt:
 
             if(self.multiprocessingQ): # multi-processing to speed search
 
-#                 neval = 2*int(10.*2.**(ndim/12.))
-#                 nkeep = 2*min(8,neval)
+                neval = 2*int(10.*2.**(ndim/12.))
+                nkeep = 2*min(8,neval)
 
-                neval = int(3) 
-                nkeep = int(2)
+#                 neval = int(3) 
+#                 nkeep = int(2)
                 
                 # parallelgridsearch generates pseudo-random grid, then performs an ICDF transform
                 # to map to multinormal distrinbution centered on x_start and with widths given by hyper params
