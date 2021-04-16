@@ -3,9 +3,12 @@
 import os 
 import operator as op
 import numpy as np
-from scipy.stats import norm
+# from scipy.stats import norm
 from scipy.optimize import minimize
-from scipy.optimize import approx_fprime
+# from scipy.optimize import approx_fprime
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as Ck, WhiteKernel
+from modules.OnlineGP import OGP
 try:
     from scipy.optimize import basinhopping
     basinhoppingQ = True
@@ -21,9 +24,7 @@ except:
     multiprocessingQ = False
 import time
 from copy import deepcopy
-
-def normVector(nparray):
-    return nparray / np.linalg.norm(nparray)
+from itertools import chain
 
 class BayesOpt:
     """
@@ -41,7 +42,7 @@ class BayesOpt:
         update the model.
     """
     
-    def __init__(self, model, target_func, acq_func='EI', xi=0.0, alt_param=-1, m=200, bounds=None, iter_bound=False, prior_data=None, start_dev_vals=None, dev_ids=None, searchBoundScaleFactor=None, verboseQ=False):
+    def __init__(self, model, target_func, acq_func='EI', xi=0.0, alt_param=-1, m=200, bounds=None, iter_bound=False, prior_data=None, start_dev_vals=None, dev_ids=None, searchBoundScaleFactor=None, optimize_kernel_on_the_fly = None, verboseQ=False):
         """        
         Initialization parameters:
         --------------------------
@@ -75,6 +76,8 @@ class BayesOpt:
             since the model can be trained externally as well.
             Assumed to be a pandas DataFrame of shape (n, dim+1) where the last
                 column contains y-values.
+        optimize_kernel_on_the_fly: if not None, int which indicated the iteration number to start kernel optimization.
+            Currently works for RBF only.
         """
         self.model = model
         self.m = m
@@ -88,32 +91,24 @@ class BayesOpt:
         self.iter_bound = iter_bound 
         self.prior_data = prior_data # for seeding the GP with data acquired by another optimizer
         self.target_func = target_func
-        print('target_func = ', target_func)
+        self.optimize_kernel_on_the_fly = optimize_kernel_on_the_fly 
+        self.verboseQ = verboseQ
+        if self.optimize_kernel_on_the_fly is not None: print('Run BO w/ kernel optimization on the fly')
         try: 
             self.mi = self.target_func.mi
-            print('********* BO - self.mi = self.target_func.mi worked!')
         except:
             self.mi = self.target_func
-            print('********* BO - self.mi = self.target_func worked!')
         self.acq_func = (acq_func, xi, alt_param)
         #self.ucb_params = [0.24, 0.4] # [nu,delta] worked well for LCLS
         self.ucb_params = [2., None] # if we want to used a fixed scale factor of the standard deviation
         self.max_iter = 100
-        self.check = None
-        self.alpha = 1
+        self.alpha = 1.0 #control the ratio of exploration to exploitation in AI acuisition function
         self.kill = False
         self.ndim = np.array(start_dev_vals).size
         self.multiprocessingQ = multiprocessingQ # speed up acquisition function optimization
-
-        #Post-edit
-        if self.mi.name == 'basic_multinormal':
-            self.dev_ids = self.mi.pvs[:-1] # last pv is objective
-            self.start_dev_vals = self.mi.x
-        else:
-            self.dev_ids = dev_ids
-            self.start_dev_vals = start_dev_vals
+        self.dev_ids = dev_ids
+        self.start_dev_vals = start_dev_vals
         self.pvs = self.dev_ids
-        self.pvs_ = [pv.replace(":","_") for pv in self.pvs]
 
         try:
             # get initial state
@@ -134,7 +129,19 @@ class BayesOpt:
             print('WARNING - GP.bayesian_optimization.BayesOpt: Using some unit length scales cause we messed up somehow...')
             self.lengthscales = np.ones(len(self.dev_ids))
         
-        if verboseQ:
+        # make a copy of the initial params
+        self.initial_hyperparams = {}
+        self.initial_hyperparams['precisionMatrix'] = np.diag(1./copy.copy(self.lengthscales)**2)
+        self.initial_hyperparams['noise_variance'] = copy.copy(self.model.noise_var) 
+        self.initial_hyperparams['amplitude_covar'] = copy.copy(self.model.amplitude_covar)
+        
+        #initiate optimized hypers
+        self.hyperparams_opt_all = {}
+        self.hyperparams_opt_all['noise_variance'] = [copy.copy(self.model.noise_var)]
+        self.hyperparams_opt_all['amplitude_covar'] = [copy.copy(self.model.amplitude_covar)]
+        self.hyperparams_opt_all['precisionMatrix'] = [1./copy.copy(self.lengthscales)**2]
+        
+        if self.verboseQ:
             print('Using prior mean function of ', self.model.prmean)
             print('Using prior mean parameters of ', self.model.prmeanp)
         
@@ -165,6 +172,102 @@ class BayesOpt:
             (x_best, y_best) = self.best_seen()
             for i, dev in enumerate(devices):
                 dev.set_value(x_best[i])
+                
+    def sk_kernel(self, hypers_dict):
+    
+        amp = hypers_dict['amplitude_covar']
+        lengthscales = np.diag(hypers_dict['precisionMatrix'])**-0.5
+        noise_var = hypers_dict['noise_variance']
+        
+        se_ard = Ck(amp)*RBF(length_scale=lengthscales, length_scale_bounds=(1e-6,10))
+        noise = WhiteKernel(noise_level=noise_var, noise_level_bounds=(1e-9, 1))  # noise terms
+        
+        sk_kernel = se_ard 
+        if self.noiseQ:
+            sk_kernel += noise
+        t0 = time.time()        
+        gpr = GaussianProcessRegressor(kernel=sk_kernel, n_restarts_optimizer=5)
+        print("Initial kernel: %s" % gpr.kernel)
+        
+#         self.ytrain = [y[0][0] for y in self.Y_obs]
+        
+        gpr.fit(self.X_obs, np.array(self.Y_obs).flatten())
+        print('SK fit time is ',time.time() - t0)
+        print("Learned kernel: %s" % gpr.kernel_)
+        print("Log-marginal-likelihood: %.3f" % gpr.log_marginal_likelihood(gpr.kernel_.theta))
+        #print(gpr.kernel_.get_params())
+        
+        
+        if self.noiseQ:
+            # RBF w/ noise
+            sk_ls = gpr.kernel_.get_params()['k1__k2__length_scale']
+            sk_amp = gpr.kernel_.get_params()['k1__k1__constant_value']
+            sk_loklik = gpr.log_marginal_likelihood(gpr.kernel_.theta)
+            sk_noise = gpr.kernel_.get_params()['k2__noise_level']
+        
+        else:
+            #RBF w/o noise
+            sk_ls = gpr.kernel_.get_params()['k2__length_scale']
+            sk_amp = gpr.kernel_.get_params()['k1__constant_value']
+            sk_loklik = gpr.log_marginal_likelihood(gpr.kernel_.theta)
+            sk_noise = 0
+
+        # make dict
+        sk_hypers = {}
+        sk_hypers['precisionMatrix'] =  np.diag(1./(sk_ls**2)) 
+        sk_hypers['noise_variance'] = sk_noise
+        sk_hypers['amplitude_covar'] = sk_amp
+
+
+        return sk_loklik, sk_hypers            
+                
+    def optimize_kernel_hyperparameters(self, noiseQ = False):
+        """
+       Optimize the kernel hyperparameters before acuiring the next point.
+       This method optimizes the kernel twice - starting from the initial or last hyperparamters.
+       Then compares the log likelihood and re-build the GP model using the most likely hypers.
+       Note:  sk learn can't deal with matrix. so we can only optimize on lengthscales.
+        """
+        self.noiseQ = noiseQ
+        # optimize kernel using SK learn from initial hyperparams
+        print('optimize on initial hyperparams')
+        sk_loklik0, sk_hypers0 = self.sk_kernel(self.initial_hyperparams)
+
+        # optimize kernel using SK learn from current hyperparams        
+        self.current_hyperparams = {}
+        self.current_hyperparams['precisionMatrix'] = np.diag(1./self.model.lengthscales**2)
+        self.current_hyperparams['noise_variance'] = self.model.noise_var
+        self.current_hyperparams['amplitude_covar'] = self.model.amplitude_covar
+                                    
+        print('optimize on last hyperparams seen so far')
+        sk_loklik, sk_hypers = self.sk_kernel(self.current_hyperparams)
+
+        # compare likelihoods and choose best hyperparams
+        if sk_loklik > sk_loklik0:
+            hyperparams_opt = sk_hypers 
+        else:
+            hyperparams_opt  = sk_hypers0
+            
+        
+        for key in hyperparams_opt:
+            if key == 'precisionMatrix':
+                self.hyperparams_opt_all[key] = np.array(list(chain(self.hyperparams_opt_all[key],                            [hyperparams_opt[key].diagonal()]))) 
+            else:
+                self.hyperparams_opt_all[key] = list(chain(self.hyperparams_opt_all[key], [hyperparams_opt[key]]))
+        
+
+        if self.verboseQ: print('hyperparams_opt ',hyperparams_opt)
+
+        # create new OnlineGP model - overwrites the existing one
+        if self.verboseQ: print('sanity dim check: ',self.model.dim == self.X_obs.shape[1])
+            
+        self.model = OGP(self.model.dim, hyperparams = hyperparams_opt, maxBV = self.model.maxBV, covar = self.model.covar) 
+#         ,weighted=self.model.weighted, maxBV=self.model.maxBV) #, prmean=self.model.prmean, prmeanp=self.model.prmeanp, prvar=self.model.prvar, prvarp=self.model.prvarp , proj=self.model.proj,thresh=self.model.thresh, sparsityQ=self.model.sparsityQ, verboseQ=self.model.verboseQ)
+        
+        
+        # initialize new model on current data
+        self.model.fit(self.X_obs, np.array(self.Y_obs).flatten(), self.X_obs.shape[0])
+
 
 
     def minimize(self, error_func, x):
@@ -180,9 +283,12 @@ class BayesOpt:
         # iterate though the GP method
         for i in range(self.max_iter):
             # get next point to try using acquisition function
-            x_next = self.acquire(self.alpha)
-            # check for problems with the beam
-            if self.check != None: self.check.errorCheck()
+            x_next = self.acquire()
+            
+            if self.optimize_kernel_on_the_fly is not None:
+                if i > self.optimize_kernel_on_the_fly:
+                    print('****** Optimizing kerenl hyperparams')
+                    self.optimize_kernel_hyperparameters()    
 
             y_new = error_func(x_next.flatten())
             if self.opt_ctrl.kill:
@@ -266,7 +372,7 @@ class BayesOpt:
         return (self.X_obs[ind_best], mu_best)
 
     
-    def acquire(self, alpha=1.):
+    def acquire(self):
         """
         Computes the next point for the optimizer to try by maximizing
         the acquisition function. If movement per iteration is bounded,
@@ -319,7 +425,7 @@ class BayesOpt:
         # expected improvement acquisition function
         elif(self.acq_func[0] == 'EI'):
             aqfcn = negExpImprove
-            fargs = (self.model, y_best, self.acq_func[1], alpha)
+            fargs = (self.model, y_best, self.acq_func[1], self.alpha)
 
         # gaussian process upper confidence bound acquisition function
         elif(self.acq_func[0] == 'UCB'):
@@ -400,10 +506,10 @@ class BayesOpt:
             else: # single-processing
 
                 if basinhoppingQ:
-                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':(self.model, y_best, self.acq_func[1], alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
+                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':(self.model, y_best, self.acq_func[1], self.alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
 
                 else:
-                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], alpha), method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
+                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], self.alpha), method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
 
                 res = res.x
                 
@@ -428,7 +534,7 @@ def negProbImprove(x_new, model, y_best, xi):
 
     return -norm.cdf(Z)
 
-def negExpImprove(x_new, model, y_best, xi, alpha=1.0):
+def negExpImprove(x_new, model, y_best, xi,alpha = 1.0):
     """
     The common acquisition function, expected improvement. Returns the
     negative for the minimizer (so that EI is maximized). Alpha attempts

@@ -40,8 +40,7 @@ class machine_interface:
         # To get the values as a 1d-array, use self.x[0]
 
     def getState(self): 
-        objective_state = 2.0 * np.exp(-0.5*self.x[0].dot(np.eye(len(self.pvs))).dot(self.x[0].T)) + 0.001*np.random.normal() #replace with expression that returns float representing current objective value
-            
+        objective_state = 1.0 * np.exp(-0.5*self.x[0].dot(np.eye(len(self.pvs))).dot(self.x[0].T)) + 0.001*np.random.normal() #replace with expression that returns float representing current objective value
         return np.array(self.x, ndmin = 2), np.array([[objective_state]])
     
  

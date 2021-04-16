@@ -209,6 +209,8 @@ class BayesOpt:
         self.current_x = np.array(np.array(x).flatten(), ndmin=2)
         self.X_obs = np.array(self.current_x)
         self.Y_obs = [np.array([[inverse_sign*error_func(x)]])]
+        
+        
         # iterate though the GP method
         for i in range(self.max_iter):
             print('<><><><><><><><> iter number {} <><><><><><><<<'.format(i))

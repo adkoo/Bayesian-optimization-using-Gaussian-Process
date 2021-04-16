@@ -50,7 +50,7 @@ my_scan_params['gp_precisionmat'] = np.array([ [0.5, 0, 0, 0],
                                                [0, 0, 0, 0.5]  ])
 
 #control device settings from which to start the scan, 1d-array of len(ndim)
-my_scan_params['start_point'] = np.array([ 0., 0., 0., 0.]) 
+my_scan_params['start_point'] = np.array([ 0., -1.0, -0.5, 0.5]) 
 
 #UCB acquisition function parameters in order [nu, delta], list of length 2. If delta is None, ucb will do a fixed tail search using nu as a zscore
 my_scan_params['ucb_params'] = [2.0, None] 
