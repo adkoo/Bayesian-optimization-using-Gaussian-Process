@@ -1,68 +1,6 @@
 # -*- coding: iso-8859-1 -*-
 """
-Designed by Lehel Csato for NETLAB, rewritten
-for Python in 2016 by Mitchell McIntire
-
-The Online Gaussian process class.
-
-Initialization parameters:
-    dim: the dimension of input data
-    hyperparams: GP model hyperparameters. For RBF_ARD, a 3-tuple with entries:
-        hyp_ARD: size (1 x dim) vector of ARD parameters
-        hyp_coeff: the coefficient parameter of the RBF kernel
-        hyp_noise: the model noise VARIANCE hyperparameter
-        Note -- different hyperparams needed for different covariance functions
-    For RBF_ARD:
-        hyp_ARD = np.log(1./(length_scales**2))
-        hyp_coeff = np.log(signal_peak_amplitude)
-        hyp_noise = np.log(signal_variance) <== note: signal standard deviation squared
-    covar: the covariance function to be used, currently only 'RBF_ARD'
-        RBF_ARD: the radial basis function with ARD, i.e. a squared exponential
-            with diagonal scaling matrix specified by hyp_ARD
-    maxBV: the number of basis vectors to represent the model. Increasing this
-        beyond 100 or so will increase runtime substantially
-    prmean: either None, a number, or a callable function that gives the prior mean
-    prmeanp: parameters to the prmean function
-    proj: I'm not sure exactly. Setting this to false gives a different method
-        of computing updates, but I haven't tested it or figured out what the
-        difference is.
-    weighted: whether or not to use weighted difference computations. Slower but may
-        yield improved performance. Still testing.
-    thresh: some low float value to specify how different a point has to be to
-        add it to the model. Keeps matrices well-conditioned.
-
-Methods:
-    update(x_new, y_new): Runs an online GP iteration incorporating the new data.
-    fit(X, Y): Calls update on multiple points for convenience. X is assumed to
-        be a pandas DataFrame.
-    predict(x): Computes GP prediction(s) for input point(s).
-    scoreBVs(): Returns a vector with the (either weighted or unweighted) KL
-        divergence-cost of removing each BV.
-    deleteBV(index): Removes the selected BV from the GP and updates to minimize
-        the (either weighted or unweighted) KL divergence-cost of the removal
-
-Change log:
-    2018-02-?? - Mitch fixed a bug where the noise parameter wasn't used
-    2018-02-23 - Joe suggestions to make code more user friendly
-                 1) Change hyper_noise input to stdev -- currently variance
-                 2) Input regular length scales -- currently log(0.5/lengths^2)
-                 3) Drop logs on input parameters. Nothing gained by logging and
-                    then exponentiating right after.
-                 4) Add option to have likelihood calculate gradients. We need to
-                    check result against full GP likelihood and also should
-                    probably train parameters on the OnlineGP if we're using it!
-    2018-05-23 - Joe added variance to prior mean and fixed the posterior PDF
-    2018-06-12 - Removed prior mean from GP likelihood calculation in update
-    
-                 Prior philosophy: GP and prior are independent models which are
-                 combined in a Bayesian way within the predict function.
-
-    2018-11-11 - Adding non-diagonal matrix elements to the RBF kernel. To use,
-                 just replace hyperlengths with a matrix instead of a vector.
-    2018-11-14 - Last step. Need option to give precision matrix unlogged
-    2018-12-05 - Dylan fixed a problem with loading in data for fitting
-    2018-12-06 - Joe added __setstate__ and __getstate__ for easy pickling
-    2019-03-20 - Joe cleaned a bit 
+Contributers: Mitchell McIntire, Joseph duris, Dylan Keneddy, Adi Hanuka
 """
 
 import numpy as np
@@ -71,38 +9,82 @@ from numpy.linalg import solve, inv
 import collections
 
 class OGP(object):
-    def __init__(self, dim, hyperparams, covar='RBF_ARD', maxBV=200,
-                 prmean=None, prmeanp=None, prvar=None, prvarp=None, proj=True, weighted=False, thresh=1e-6, sparsityQ = True):
-        self.nin = dim
+    """
+    The Online Gaussian process class. Methods:
+        update(x_new, y_new): Runs an online GP iteration incorporating the new data.
+        fit(X, Y): Calls update on multiple points for convenience. X is assumed to
+            be a pandas DataFrame.
+        predict(x): Computes GP prediction(s) for input point(s).
+        scoreBVs(): Returns a vector with the (either weighted or unweighted) KL
+            divergence-cost of removing each BV.
+        deleteBV(index): Removes the selected BV from the GP and updates to minimize
+            the (either weighted or unweighted) KL divergence-cost of the removal
+    """
+    def __init__(self, dim, hyperparams, covar = ['RBF','MATERN32','MATERN52','x2','booth'][0], maxBV=200, bias = None,
+                 prmean=None, prmeanp=None, prvar=None, prvarp=None, proj=True, weighted=False, thresh=1e-6, sparsityQ = True, verboseQ=False):
+        """
+        Initialization parameters:
+        --------------------------
+        dim: the dimension of input data 
+        hyperparams:  Dictionary. GP model hyperparameters.
+        
+            hyp_ARD = np.log(1./(length_scales**2))
+            hyp_coeff = np.log(signal_peak_amplitude)
+            hyp_noise = np.log(signal_variance) <== note: signal standard deviation squared
+        covar: the covariance function to be used, defaluts to 'RBF' the radial basis function
+        maxBV: the number of basis vectors to represent the model. Increasing this
+               beyond 100 or so will increase runtime substantially 
+        prmean: either None, a number, or a callable function that gives the prior mean
+        prmeanp: parameters to the prmean function
+        prvar: prior variance function
+        proj: I'm not sure exactly. Setting this to false gives a different method
+            of computing updates, but I haven't tested it or figured out what the
+            difference is.
+        weighted: whether or not to use weighted difference computations. Slower but may
+            yield improved performance. Still testing.
+        thresh: novelty factor. some low float value to specify how different a point has to be to
+        add it to the model. Keeps matrices well-conditioned.
+        sparsityQ: False = force not to do sparsity
+        verboseQ: printing         
+        """
+         
+        self.dim = dim
         self.maxBV = maxBV
         self.numBV = 0
         self.proj = proj
         self.weighted = weighted
         self.sparsityQ = sparsityQ
-        self.verboseQ = False
+        self.verboseQ = verboseQ
         self.nupdates = 0
 
-        if(covar in ['RBF_ARD']):
+        if (covar in ['RBF','MATERN32','MATERN52','x2','booth']):
             self.covar = covar
-            self.covar_params = hyperparams[:2]
-            self.precisionMatrix = None
-            cps = np.shape(self.covar_params[0])
+            self.amplitude_covar = hyperparams['amplitude_covar'] #amplitude covariance
+            self.noise_var = hyperparams['noise_variance'] # variance -- not stdev
+            cps = np.shape(hyperparams['precisionMatrix'])
             if len(cps) == 2:
                 if cps[0] == cps[1]:
-                    self.precisionMatrix = self.covar_params[0]
+                    self.precisionMatrix = hyperparams['precisionMatrix']
+                    self.lengthscales = np.array(np.diag(self.precisionMatrix)**(-0.5))
+            elif len(cps) == 1:
+                    print('incorrect number of parameters detected in gp_precisionmat')
+                    if cps[0]  == self.dim:
+                        print('assuming gp_precisionmat are lengthscales vector')
+                        self.lengthscales = hyperparams['precisionMatrix'] 
+                        self.precisionMatrix = np.array(np.diag(self.precisionMatrix)**(-2))
         else:
-            self.precisionMatrix = None
             print('ERROR - OnlineGP: Unknown covariance function')
             raise
-
-        self.noise_var = np.exp(hyperparams[2]) # variance -- not stdev
+            
+        #bias
+        self.bias = bias
 
         # prior (mean and variance): function; parameters
         self.prmean = prmean; self.prmeanp = prmeanp
         self.prvar = prvar; self.prvarp = prvarp
 
         # initialize model state
-        self.BV = np.zeros(shape=(0,self.nin))
+        self.BV = np.zeros(shape=(0,self.dim))
         self.alpha = np.zeros(shape=(0,1))
         self.C = np.zeros(shape=(0,0))
 
@@ -110,25 +92,6 @@ class OGP(object):
         self.KBinv = np.zeros(shape=(0,0))
 
         self.thresh = thresh
-
-    def __getstate__(self):
-        # Copy the object's state from self.__dict__ which contains
-        # all our instance atributes. Always use the dict.copy()
-        # method to avoid modifying the original state.
-        state = self.__dict__.copy()
-        
-        # Remove unpicklable entries (these would need to be recreated
-        # in the __setstate__ function. 
-        # Example: del state['file'] # since the file handle isn't pickleable
-        
-        return state
-        
-    def __setstate__(self, state):
-        # Restore instance attributes
-        self.__dict__.update(state)
-        
-        # Should also manually recreate unpicklable members.
-        # Example: file = load(self.filename)
 
     def fit(self, X, Y, m=0):
         X = np.array(X) # numpy and pandas have inconsistent slicing conventions so choose one
@@ -180,22 +143,24 @@ class OGP(object):
             pass
 
     def predict(self, x_in):
-        # reads in a (n x dim) vector and returns the (n x 1) vector
-        #   of predictions along with predictive variance for each
-
+        """ 
+        reads in a (n x dim) vector and returns the (n x 1) vector
+        of predictions along with predictive variance for each
+        """
         # GP regression
         k_x = self.computeCov(x_in, self.BV)
         k = self.computeCov(x_in, x_in, is_self=True)
         gpMean = np.dot(k_x, self.alpha)
         gpVar = k + np.dot(k_x,np.dot(self.C,k_x.transpose()))
-
- #        print(('OGP: BV = ',self.BV))
- #        print(('OGP: C = ',self.C))
- #        print(('OGP: alpha = ',self.alpha))
- #        print(('OGP: x_in = ',x_in))
- #        print(('OGP: k_x = ',k_x))
- #        print(('OGP: k = ',k))
- #        print(('OGP: gpMean, gpVar = ',gpMean, gpVar))
+        
+        if self.verboseQ:
+            print(('OGP: BV = ',self.BV))
+            print(('OGP: C = ',self.C))
+            print(('OGP: alpha = ',self.alpha))
+            print(('OGP: x_in = ',x_in))
+            print(('OGP: k_x = ',k_x))
+            print(('OGP: k = ',k))
+            print(('OGP: gpMean, gpVar = ',gpMean, gpVar))
 
         # combine with prior and return posterior PDF
         if(isinstance(self.prmean, collections.Callable) and isinstance(self.prvar, collections.Callable)): # we have a prior mean & variance
@@ -212,8 +177,9 @@ class OGP(object):
             return gpMean, gpVar
 
     def _sparseParamUpdate(self, k_x, K1, K2, gamma, hatE):
-        # computes a sparse update to the model without expanding parameters
-
+        """
+        computes a sparse update to the model without expanding parameters
+        """
         eta = 1
         if(self.proj):
             eta += K2 * gamma
@@ -225,7 +191,8 @@ class OGP(object):
         self.C = stabilizeMatrix(self.C)
 
     def _fullParamUpdate(self, x_new, k_x, k, K1, K2, gamma, hatE):
-        # expands parameters to incorporate new input
+        """expands parameters to incorporate new input
+        """
 
         # add new input to basis vectors
         oldnumBV = self.BV.shape[0]
@@ -262,9 +229,10 @@ class OGP(object):
         self.KBinv = stabilizeMatrix(self.KBinv)
 
     def scoreBVs(self):
-        # measures the importance of each BV for model accuracy
-        # currently quite slow for the weighted GP if numBV is much more than 50
-
+        """
+        measures the importance of each BV for model accuracy
+        currently quite slow for the weighted GP if numBV is much more than 50
+        """
         numBV = self.BV.shape[0]
         a = self.alpha
         if(not self.weighted):
@@ -306,8 +274,10 @@ class OGP(object):
             return 1
 
     def deleteBV(self, removeInd):
-        # removes a BV from the model and modifies parameters to
-        #   attempt to minimize the removal's impact
+        """
+        removes a BV from the model and modifies parameters to
+        attempt to minimize the removal's impact
+        """
 
         numBV = self.BV.shape[0]
         keepInd = [i for i in range(numBV) if i != removeInd]
@@ -329,8 +299,10 @@ class OGP(object):
         self.BV = self.BV[keepInd]
 
     def computeWeightedDiv(self, hatalpha, hatC, removeInd):
-        # computes the weighted divergence for removing a specific BV
-        # currently uses matrix inversion and therefore somewhat slow
+        """
+        computes the weighted divergence for removing a specific BV
+        currently uses matrix inversion and therefore somewhat slow
+        """
 
         hatalpha = extendVector(hatalpha, ind=removeInd)
         hatC = extendMatrix(hatC, ind=removeInd)
@@ -353,8 +325,9 @@ class OGP(object):
         return np.dot(M.transpose(), np.dot(hatV, diff)) + w
 
     def getUpdatedParams(self, removeInd):
-        # computes updates for alpha and C after removing the given BV
-
+        """
+        computes updates for alpha and C after removing the given BV
+        """
         numBV = self.BV.shape[0]
         keepInd = [i for i in range(numBV) if i != removeInd]
         a = self.alpha
@@ -404,71 +377,82 @@ class OGP(object):
         return hatalpha, hatC
 
     def computeCov(self, x1, x2, is_self=False):
-        # computes covariance between inputs x1 and x2
-        #   returns a matrix of size (n1 x n2)
-        
-        if np.size(np.shape(self.covar_params[0])) == 2:
-            K = self.computeCBF(x1, x2)
-        else:
-            K = self.computeRBF(x1, x2)
-        if(is_self):
-            K = K + self.noise_var * np.eye(x1.shape[0])
+        """
+        computes covariance between inputs x1 and x2
+        returns a matrix of size (n1 x n2)   
+        """
+        if self.covar == 'x2':
+            Kx = np.dot(x1[:,0][:,None],x2[:,0][:,None].T)
+            Ky = np.dot(x1[:,1][:,None],x2[:,1][:,None].T)
+            K = Kx**2 +Ky**2
             
+        elif self.covar == 'booth':
+            Kx = np.dot(x1[:,0][:,None],x2[:,0][:,None].T)
+            Ky = np.dot(x1[:,1][:,None],x2[:,1][:,None].T)
+            K = (Kx+2*Ky)**2 + (Ky+2*Kx)**2
+            
+        elif self.covar == 'MATERN32':
+            K = self.computeMatern(x1, x2, nu=1.5)
+        
+        elif self.covar == 'MATERN52':
+            K = self.computeMatern(x1, x2, nu=2.5)
+        
+        else: # default to rbf
+            if np.size(np.shape(self.precisionMatrix)) == 2:
+                K = self.computeCBF(x1, x2)
+            else:
+                K = self.computeRBF(x1, x2)
+        if self.verboseQ:
+            print('K',K) 
+
+        # add noise
+        if (is_self):
+            K += self.noise_var * np.eye(x1.shape[0])
+        
+        #add bias kernel
+        if self.bias:
+             K += self.bias
+
         return K
 
-    def computeRBF(self, x1, x2): # radial basis functions
+    def computeRBF(self, x1, x2): 
+        """
+        radial basis function kernel
+        """
         (n1, dim) = x1.shape
         n2 = x2.shape[0]
 
-        (hyp_ARD, hyp_coeff) = self.covar_params
+        b = self.precisionMatrix
+        amp_covar = self.amplitude_covar
 
-        # turn to normal units
-        b = np.exp(hyp_ARD)
-        coeff = np.exp(hyp_coeff)
-
-        # use ARD to scale
+        # use precision matrix to scale
         b_sqrt = np.sqrt(b)
         x1 = x1 * b_sqrt
         x2 = x2 * b_sqrt
 
         x1_sum_sq = np.reshape(np.sum(x1 * x1, axis=1), (n1,1))
         x2_sum_sq = np.reshape(np.sum(x2 * x2, axis=1), (1,n2))
-
+        
         K = -2 * np.dot(x1, x2.transpose())
         K = K + x1_sum_sq + x2_sum_sq
-        K = coeff * np.exp(-0.5 * K)
+        K = amp_covar * np.exp(-0.5 * K)
 
         return K
 
     # updated to allow non-diagonal kernel matrix
-    def computeCBF(self, x1, x2): # correlated basis functions
+    def computeCBF(self, x1, x2):
+        """
+        correlated basis functions
+        """
         (n1, dim) = x1.shape
         n2 = x2.shape[0]
 
         if n1*n2 == 0:
             return np.array([])
 
-        (hyp_ARD, hyp_coeff) = self.covar_params
-        coeff = np.exp(hyp_coeff)
-
-        if type(self.precisionMatrix) == type(None):
-
-            # turn to normal units
-            b = np.exp(hyp_ARD)
-
-            # if kernel params are a vector, reshape to a diagonal matrix
-            sk = np.shape(b)
-            nk = np.size(sk) # 0 if scalar; 1 if vector; 2 if matrix
-            if nk < 2:
-                b = np.diagflat(b)
-            elif nk == 2 and sk[0] < sk[1]:
-                b = np.diagflat(b)
-            elif nk > 2:
-                print('WARNING - OnlineGP: kernel is a strange shape.')
-
-        else:
-            b = self.precisionMatrix
-
+        b = self.precisionMatrix
+        amp_covar = self.amplitude_covar
+     
         # save duplicate computations
         bdotx1T = np.array([np.dot(b,x.transpose()).transpose() for x in x1])
         bdotx2T = np.array([np.dot(b,x.transpose()).transpose() for x in x2])
@@ -478,7 +462,7 @@ class OGP(object):
 
         K = -2 * np.dot(x1, bdotx2T.transpose())
         K = K + x1_sum_sq + x2_sum_sq
-        K = coeff * np.exp(-0.5 * K)
+        K = amp_covar * np.exp(-0.5 * K)
 
         return K
 
@@ -486,39 +470,32 @@ class OGP(object):
         (n1, dim) = x1.shape
         n2 = x2.shape[0]
 
-        (hyp_ARD, hyp_coeff) = self.covar_params
-
-        b = np.exp(hyp_ARD)
-        coeff = np.exp(hyp_coeff)
+        b = self.precisionMatrix
+        amp_covar = self.amplitude_covar
 
         # use ARD to scale
         b_sqrt = np.sqrt(b)
         x1 = x1 * b_sqrt
         x2 = x2 * b_sqrt
 
-        if(n1 != n2 or np.any(x1-x2)):
-            x1_sum_sq = np.reshape(np.sum(x1 * x1, axis=1), (n1,1))
-            x2_sum_sq = np.reshape(np.sum(x2 * x2, axis=1), (1,n2))
+        x1_sum_sq = np.reshape(np.sum(x1 * x1, axis=1), (n1, 1))
+        x2_sum_sq = np.reshape(np.sum(x2 * x2, axis=1), (1, n2))
 
-            dist_sq = -2 * np.dot(x1, x2.transpose())
-            dist_sq = dist_sq + x1_sum_sq + x2_sum_sq
-            dist = np.sqrt(dist_sq)
+        dist_sq = x1_sum_sq  -2 * np.dot(x1, x2.transpose()) + x2_sum_sq
+        dist = np.sqrt(dist_sq + 1e-14)
+       
+        if (nu == 1.5):
+            poly = 1 + np.sqrt(3.0) * dist
+        elif (nu == 2.5):
+            poly = 1 + np.sqrt(5.0) * dist + (5.0 / 3.0) * dist_sq
         else:
-            dist = np.zeros((n1,n2))
-            dist_sq = np.zeros((n1,n2))
+            print('Invalid nu (only 1.5 and 2.5 supported)')
 
-        if(nu==1.5):
-            poly = 1 + np.sqrt(3.0)*dist
-        elif(nu==2.5):
-            poly = 1 + np.sqrt(5.0)*dist + (5.0/3.0)*dist_sq
-        else:
-            print('ERROR - OnlineGP: Invalid nu (only 1.5 and 2.5 supported)')
-
-        K = coeff * poly * np.exp(-np.sqrt(2*nu)*dist)
+        K = amp_covar * poly * np.exp(-np.sqrt(2 * nu) * dist)
 
         return K
         
-    # end OGP class
+#######################################################################
 
 # GP function prediction pdf
 def logLikelihood(noise, y, mu, var):

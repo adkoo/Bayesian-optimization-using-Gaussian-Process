@@ -1,37 +1,34 @@
 # -*- coding: iso-8859-1 -*-
-"""
-Contains the Bayes optimization class.
-Initialization parameters:
-    model: an object with methods 'predict', 'fit', and 'update'
-    interface: an object which supplies the state of the system and
-        allows for changing the system's x-value.
-        Should have methods '(x,y) = intfc.getState()' and 'intfc.setX(x_new)'.
-        Note that this interface system is rough, and used for testing and
-            as a placeholder for the machine interface.
-    acq_func: specifies how the optimizer should choose its next point.
-        'PI': uses probability of improvement. The interface should supply y-values.
-        'EI': uses expected improvement. The interface should supply y-values.
-        'UCB': uses GP upper confidence bound. No y-values needed.
-        'testEI': uses EI over a finite set of points. This set must be
-            provided as alt_param, and the interface need not supply
-            meaningful y-values.
-    xi: exploration parameter suggested in some Bayesian opt. literature
-    alt_param: currently only used when acq_func=='testEI'
-    m: the maximum size of model; can be ignored unless passing an untrained
-        SPGP or other model which doesn't already know its own size
-    bounds: a tuple of (min,max) tuples specifying search bounds for each
-        input dimension. Generally leads to better performance.
-        Has a different interpretation when iter_bounds is True.
-    iter_bounds: if True, bounds the distance that can be moved in a single
-        iteration in terms of the length scale in each dimension. Uses the
-        bounds variable as a multiple of the length scales, so bounds==2
-        with iter_bounds==True limits movement per iteration to two length
-        scales in each dimension. Generally a good idea for safety, etc.
-    prior_data: input data to train the model on initially. For convenience,
-        since the model can be trained externally as well.
-        Assumed to be a pandas DataFrame of shape (n, dim+1) where the last
-            column contains y-values.
-Methods:
+
+import os 
+import operator as op
+import numpy as np
+# from scipy.stats import norm
+from scipy.optimize import minimize
+# from scipy.optimize import approx_fprime
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as Ck, WhiteKernel
+from modules.OnlineGP import OGP
+try:
+    from scipy.optimize import basinhopping
+    basinhoppingQ = True
+except:
+    basinhoppingQ = False
+try:
+    from .parallelstuff import *
+    multiprocessingQ = True
+    basinhoppingQ = False
+except:
+    print ('failed to import parallelstuff')
+    basinhoppingQ = False
+    multiprocessingQ = False
+import time
+from copy import deepcopy
+from itertools import chain
+
+class BayesOpt:
+    """
+    Contains the Bayesian optimization class with the following methods:
     acquire(): Returns the point that maximizes the acquisition function.
         For 'testEI', returns the index of the point instead.
         For normal acquisition, currently uses the bounded L-BFGS optimizer.
@@ -43,49 +40,49 @@ Methods:
     OptIter(): The main method for Bayesian optimization. Maximizes the
         acquisition function, then uses the interface to test this point and
         update the model.
-
-# TODO callbacks or real-time acquisition needed: appears that the minimizer for the acquisition fcn only looks for number of devices when loaded; not when devices change
-2018-04-24: Need to improve hyperparam import
-2018-05-23: Adding prior variance
-2018-08-27: Removed prior variance
-            Changed some hyper params to work more like 4/28 GOLD version
-            Also updated parallelstuff with batch eval to prevent fork bombs
-2018-11-11: Added correlations; last step: need to strip the logs out of everything
-2018-11-15: Hunted down factors of 0.5 & 2 in the hyperparameters and corrected for consistency. Also changed to regress using standard error of mean instead of standard deviation of the samples.
-"""
-
-import os # check os name
-import operator as op
-import numpy as np
-from scipy.stats import norm
-from scipy.optimize import minimize
-from scipy.optimize import approx_fprime
-try:
-    from scipy.optimize import basinhopping
-    basinhoppingQ = True
-except:
-    basinhoppingQ = False
-try:
-    from .parallelstuff import *
-#     from parallelstuff import *
-    multiprocessingQ = True
-    basinhoppingQ = False
-except:
-    print ('failed to import parallelstuff')
-    basinhoppingQ = False
-    multiprocessingQ = False
-import time
-from copy import deepcopy
-
-def normVector(nparray):
-    return nparray / np.linalg.norm(nparray)
-
-class BayesOpt:
-    def __init__(self, model, target_func, acq_func='EI', xi=0.0, alt_param=-1, m=200, bounds=None, iter_bound=False, prior_data=None, start_dev_vals=None, dev_ids=None, searchBoundScaleFactor=None):
+    """
+    
+    def __init__(self, model, target_func, acq_func='EI', xi=0.0, alt_param=-1, m=200, bounds=None, iter_bound=False, prior_data=None, start_dev_vals=None, dev_ids=None, searchBoundScaleFactor=None, optimize_kernel_on_the_fly = None, verboseQ=False):
+        """        
+        Initialization parameters:
+        --------------------------
+        model: an object with methods 'predict', 'fit', and 'update'
+                surrogate model to use
+        interface: an object which supplies the state of the system and
+            allows for changing the system's x-value.
+            Should have methods '(x,y) = intfc.getState()' and 'intfc.setX(x_new)'.
+            Note that this interface system is rough, and used for testing and
+                as a placeholder for the machine interface.
+        acq_func: specifies how the optimizer should choose its next point.
+            'PI': uses probability of improvement. The interface should supply y-values.
+            'EI': uses expected improvement. The interface should supply y-values.
+            'UCB': uses GP upper confidence bound. No y-values needed.
+            'testEI': uses EI over a finite set of points. This set must be
+                provided as alt_param, and the interface need not supply
+                meaningful y-values.
+        xi: exploration parameter suggested in some Bayesian opt. literature
+        alt_param: currently only used when acq_func=='testEI'
+        m: the maximum size of model; can be ignored unless passing an untrained
+            SPGP or other model which doesn't already know its own size
+        bounds: a tuple of (min,max) tuples specifying search bounds for each
+            input dimension. Generally leads to better performance.
+            Has a different interpretation when iter_bounds is True.
+        iter_bounds: if True, bounds the distance that can be moved in a single
+            iteration in terms of the length scale in each dimension. Uses the
+            bounds variable as a multiple of the length scales, so bounds==2
+            with iter_bounds==True limits movement per iteration to two length
+            scales in each dimension. Generally a good idea for safety, etc.
+        prior_data: input data to train the model on initially. For convenience,
+            since the model can be trained externally as well.
+            Assumed to be a pandas DataFrame of shape (n, dim+1) where the last
+                column contains y-values.
+        optimize_kernel_on_the_fly: if not None, int which indicated the iteration number to start kernel optimization.
+            Currently works for RBF only.
+        """
         self.model = model
         self.m = m
         self.bounds = bounds
-        self.searchBoundScaleFactor = 2.
+        self.searchBoundScaleFactor = 1.
         if type(searchBoundScaleFactor) is not type(None):
             try:
                 self.searchBoundScaleFactor = abs(searchBoundScaleFactor)
@@ -94,39 +91,24 @@ class BayesOpt:
         self.iter_bound = iter_bound 
         self.prior_data = prior_data # for seeding the GP with data acquired by another optimizer
         self.target_func = target_func
-        print('target_func = ', target_func)
+        self.optimize_kernel_on_the_fly = optimize_kernel_on_the_fly 
+        self.verboseQ = verboseQ
+        if self.optimize_kernel_on_the_fly is not None: print('Run BO w/ kernel optimization on the fly')
         try: 
             self.mi = self.target_func.mi
-            print('********* BO - self.mi = self.target_func.mi wORKED!')
         except:
             self.mi = self.target_func
-            print('********* BO - self.mi = self.target_func wORKED!')
         self.acq_func = (acq_func, xi, alt_param)
-        ## the nus in these here should be increased by a factor of npts_per_sample if using standard error of the mean as noise param
-        ##self.ucb_params = [0.01, 2.] # [nu,delta]
-        #self.ucb_params = [0.002, 0.4] # [nu,delta] we like
-        ##self.ucb_params = [0.007, 1.0] # [nu,delta]
-        # the nus in these here should be used with the standard error of the mean
-        #self.ucb_params = [0.12, 2.] # [nu,delta]
-#        self.ucb_params = [0.24, 0.4] # [nu,delta] we like
-        #self.ucb_params = [0.84, 1.0] # [nu,delta]
+        #self.ucb_params = [0.24, 0.4] # [nu,delta] worked well for LCLS
         self.ucb_params = [2., None] # if we want to used a fixed scale factor of the standard deviation
         self.max_iter = 100
-        self.check = None
-        self.alpha = 1
+        self.alpha = 1.0 #control the ratio of exploration to exploitation in AI acuisition function
         self.kill = False
         self.ndim = np.array(start_dev_vals).size
         self.multiprocessingQ = multiprocessingQ # speed up acquisition function optimization
-
-        #Post-edit
-        if self.mi.name == 'MultinormalInterface':
-            self.dev_ids = self.mi.pvs[:-1] # last pv is objective
-            self.start_dev_vals = self.mi.x
-        else:
-            self.dev_ids = dev_ids
-            self.start_dev_vals = start_dev_vals
+        self.dev_ids = dev_ids
+        self.start_dev_vals = start_dev_vals
         self.pvs = self.dev_ids
-        self.pvs_ = [pv.replace(":","_") for pv in self.pvs]
 
         try:
             # get initial state
@@ -142,41 +124,36 @@ class BayesOpt:
         
         # calculate length scales
         try:
-            # length scales from covar params
-            cp = self.model.covar_params[0]
-            cps = np.shape(cp)
-            lengthscales = np.sqrt(1./np.exp(cp))
-            if np.size(cps) == 2:
-                if cps[0] < cps[1]: # vector of lengths
-                    self.lengthscales = lengthscales.flatten()
-                else: # matrix of lengths
-                    self.lengthscales = np.diag(lengthscales)
+            self.lengthscales = self.model.lengthscales
         except:
             print('WARNING - GP.bayesian_optimization.BayesOpt: Using some unit length scales cause we messed up somehow...')
             self.lengthscales = np.ones(len(self.dev_ids))
         
-        ## initialize the prior 
-        #self.model.prmean = None # prior mean fcn
-        #self.model.prmeanp = None # params of prmean fcn
-        #self.model.prvar = None
-        #self.model.prvarp = None
-        #self.model.prmean_name = ''
-     
-        print('Using prior mean function of ', self.model.prmean)
-        print('Using prior mean parameters of ', self.model.prmeanp)
+        # make a copy of the initial params
+        self.initial_hyperparams = {}
+        self.initial_hyperparams['precisionMatrix'] = np.diag(1./copy.copy(self.lengthscales)**2)
+        self.initial_hyperparams['noise_variance'] = copy.copy(self.model.noise_var) 
+        self.initial_hyperparams['amplitude_covar'] = copy.copy(self.model.amplitude_covar)
+        
+        #initiate optimized hypers
+        self.hyperparams_opt_all = {}
+        self.hyperparams_opt_all['noise_variance'] = [copy.copy(self.model.noise_var)]
+        self.hyperparams_opt_all['amplitude_covar'] = [copy.copy(self.model.amplitude_covar)]
+        self.hyperparams_opt_all['precisionMatrix'] = [1./copy.copy(self.lengthscales)**2]
+        
+        if self.verboseQ:
+            print('Using prior mean function of ', self.model.prmean)
+            print('Using prior mean parameters of ', self.model.prmeanp)
+        
         
     def getState(self):
-        #print('>>>>>>>> getState') 
-        #x_vals = [self.mi.get_value(d) for d in self.dev_ids]
-        #print('>>>>>>>>>>>>>>>>>>>> invoking get_penalty')
-        #y_val = -self.target_func.get_penalty()
-        #print(y_val)
-        #print('>>>>>>>>>>>>> getState returning')
-
-        #Note: Dylan edited this function on 2019-08-30 for use with his simple_machine_interface class by commenting out the lines above and replacing them with the line immediately below
+        """
+        get current state of the machine
+        """
         x_vals, y_val = self.mi.getState()
         return x_vals, y_val
 
+    
     def terminate(self, devices):
         """
         Sets the position back to the location that seems best in hindsight.
@@ -195,20 +172,123 @@ class BayesOpt:
             (x_best, y_best) = self.best_seen()
             for i, dev in enumerate(devices):
                 dev.set_value(x_best[i])
+                
+    def sk_kernel(self, hypers_dict):
+    
+        amp = hypers_dict['amplitude_covar']
+        lengthscales = np.diag(hypers_dict['precisionMatrix'])**-0.5
+        noise_var = hypers_dict['noise_variance']
+        
+        se_ard = Ck(amp)*RBF(length_scale=lengthscales, length_scale_bounds=(1e-6,10))
+        noise = WhiteKernel(noise_level=noise_var, noise_level_bounds=(1e-9, 1))  # noise terms
+        
+        sk_kernel = se_ard 
+        if self.noiseQ:
+            sk_kernel += noise
+        t0 = time.time()        
+        gpr = GaussianProcessRegressor(kernel=sk_kernel, n_restarts_optimizer=5)
+        print("Initial kernel: %s" % gpr.kernel)
+        
+#         self.ytrain = [y[0][0] for y in self.Y_obs]
+        
+        gpr.fit(self.X_obs, np.array(self.Y_obs).flatten())
+        print('SK fit time is ',time.time() - t0)
+        print("Learned kernel: %s" % gpr.kernel_)
+        print("Log-marginal-likelihood: %.3f" % gpr.log_marginal_likelihood(gpr.kernel_.theta))
+        #print(gpr.kernel_.get_params())
+        
+        
+        if self.noiseQ:
+            # RBF w/ noise
+            sk_ls = gpr.kernel_.get_params()['k1__k2__length_scale']
+            sk_amp = gpr.kernel_.get_params()['k1__k1__constant_value']
+            sk_loklik = gpr.log_marginal_likelihood(gpr.kernel_.theta)
+            sk_noise = gpr.kernel_.get_params()['k2__noise_level']
+        
+        else:
+            #RBF w/o noise
+            sk_ls = gpr.kernel_.get_params()['k2__length_scale']
+            sk_amp = gpr.kernel_.get_params()['k1__constant_value']
+            sk_loklik = gpr.log_marginal_likelihood(gpr.kernel_.theta)
+            sk_noise = 0
+
+        # make dict
+        sk_hypers = {}
+        sk_hypers['precisionMatrix'] =  np.diag(1./(sk_ls**2)) 
+        sk_hypers['noise_variance'] = sk_noise
+        sk_hypers['amplitude_covar'] = sk_amp
+
+
+        return sk_loklik, sk_hypers            
+                
+    def optimize_kernel_hyperparameters(self, noiseQ = False):
+        """
+       Optimize the kernel hyperparameters before acuiring the next point.
+       This method optimizes the kernel twice - starting from the initial or last hyperparamters.
+       Then compares the log likelihood and re-build the GP model using the most likely hypers.
+       Note:  sk learn can't deal with matrix. so we can only optimize on lengthscales.
+        """
+        self.noiseQ = noiseQ
+        # optimize kernel using SK learn from initial hyperparams
+        print('optimize on initial hyperparams')
+        sk_loklik0, sk_hypers0 = self.sk_kernel(self.initial_hyperparams)
+
+        # optimize kernel using SK learn from current hyperparams        
+        self.current_hyperparams = {}
+        self.current_hyperparams['precisionMatrix'] = np.diag(1./self.model.lengthscales**2)
+        self.current_hyperparams['noise_variance'] = self.model.noise_var
+        self.current_hyperparams['amplitude_covar'] = self.model.amplitude_covar
+                                    
+        print('optimize on last hyperparams seen so far')
+        sk_loklik, sk_hypers = self.sk_kernel(self.current_hyperparams)
+
+        # compare likelihoods and choose best hyperparams
+        if sk_loklik > sk_loklik0:
+            hyperparams_opt = sk_hypers 
+        else:
+            hyperparams_opt  = sk_hypers0
+            
+        
+        for key in hyperparams_opt:
+            if key == 'precisionMatrix':
+                self.hyperparams_opt_all[key] = np.array(list(chain(self.hyperparams_opt_all[key],                            [hyperparams_opt[key].diagonal()]))) 
+            else:
+                self.hyperparams_opt_all[key] = list(chain(self.hyperparams_opt_all[key], [hyperparams_opt[key]]))
+        
+
+        if self.verboseQ: print('hyperparams_opt ',hyperparams_opt)
+
+        # create new OnlineGP model - overwrites the existing one
+        if self.verboseQ: print('sanity dim check: ',self.model.dim == self.X_obs.shape[1])
+            
+        self.model = OGP(self.model.dim, hyperparams = hyperparams_opt, maxBV = self.model.maxBV, covar = self.model.covar) 
+#         ,weighted=self.model.weighted, maxBV=self.model.maxBV) #, prmean=self.model.prmean, prmeanp=self.model.prmeanp, prvar=self.model.prvar, prvarp=self.model.prvarp , proj=self.model.proj,thresh=self.model.thresh, sparsityQ=self.model.sparsityQ, verboseQ=self.model.verboseQ)
+        
+        
+        # initialize new model on current data
+        self.model.fit(self.X_obs, np.array(self.Y_obs).flatten(), self.X_obs.shape[0])
+
 
 
     def minimize(self, error_func, x):
-        # weighting for exploration vs exploitation in the GP at the end of scan, alpha array goes from 1 to zero
+        """
+        weighting for exploration vs exploitation in the GP 
+        at the end of scan, alpha array goes from 1 to zero.
+        """
         inverse_sign = -1
         self.current_x = np.array(np.array(x).flatten(), ndmin=2)
         self.X_obs = np.array(self.current_x)
         self.Y_obs = [np.array([[inverse_sign*error_func(x)]])]
+        
         # iterate though the GP method
         for i in range(self.max_iter):
             # get next point to try using acquisition function
-            x_next = self.acquire(self.alpha)
-            # check for problems with the beam
-            if self.check != None: self.check.errorCheck()
+            x_next = self.acquire()
+            
+            if self.optimize_kernel_on_the_fly is not None:
+                if i > self.optimize_kernel_on_the_fly:
+                    print('****** Optimizing kerenl hyperparams')
+                    self.optimize_kernel_hyperparameters()    
 
             y_new = error_func(x_next.flatten())
             if self.opt_ctrl.kill:
@@ -227,14 +307,17 @@ class BayesOpt:
             # update the model (may want to add noise if using testEI)
             self.model.update(x_new, y_new)
 
+            
     def OptIter(self,pause=0):
-        # runs the optimizer for one iteration
-    
+        """
+        runs the optimizer for one iteration
+        """
+        
         # get next point to try using acquisition function
         x_next = self.acquire()
         if(self.acq_func[0] == 'testEI'):
             ind = x_next
-            x_next = np.array(self.acq_func[2].iloc[ind,:-1],ndmin=2)
+            x_next = np.array(self.acq_func[2].iloc[ind,:-1],ndmin=2)    
         
         # change position of interface and get resulting y-value
         self.mi.setX(x_next)
@@ -251,7 +334,9 @@ class BayesOpt:
             
             
     def ForcePoint(self,x_next):
-        # force a point acquisition at our discretion and update the model
+        """
+        force a point acquisition at our discretion and update the model
+        """
         
         # change position of interface and get resulting y-value
         self.mi.setX(x_next)
@@ -266,6 +351,7 @@ class BayesOpt:
         # update the model (may want to add noise if using testEI)
         self.model.update(x_new, y_new)
 
+        
     def best_seen(self):
         """
         Checks the observed points to see which is predicted to be best.
@@ -285,7 +371,8 @@ class BayesOpt:
         (ind_best, mu_best) = max(enumerate(mu), key=op.itemgetter(1))
         return (self.X_obs[ind_best], mu_best)
 
-    def acquire(self, alpha=1.):
+    
+    def acquire(self):
         """
         Computes the next point for the optimizer to try by maximizing
         the acquisition function. If movement per iteration is bounded,
@@ -311,12 +398,11 @@ class BayesOpt:
             bound_lengths = self.searchBoundScaleFactor * 3. * self.lengthscales # 3x hyperparam lengths
             relative_bounds = np.transpose(np.array([-bound_lengths, bound_lengths]))
             
-            #iter_bounds = np.transpose(np.array([x_start - bound_lengths, x_start + bound_lengths]))
             iter_bounds = np.transpose(np.array([x_start - bound_lengths, x_start + bound_lengths]))
 
         else:
             iter_bounds = self.bounds
-
+  
         # options for finding the peak of the acquisition function:
         optmethod = 'L-BFGS-B' # L-BFGS-B, BFGS, TNC, and SLSQP allow bounds whereas Powell and COBYLA don't
         maxiter = 1000 # max number of steps for one scipy.optimize.minimize call
@@ -339,7 +425,7 @@ class BayesOpt:
         # expected improvement acquisition function
         elif(self.acq_func[0] == 'EI'):
             aqfcn = negExpImprove
-            fargs = (self.model, y_best, self.acq_func[1], alpha)
+            fargs = (self.model, y_best, self.acq_func[1], self.alpha)
 
         # gaussian process upper confidence bound acquisition function
         elif(self.acq_func[0] == 'UCB'):
@@ -367,24 +453,17 @@ class BayesOpt:
             return 0
 
         try:
-
             if(self.multiprocessingQ): # multi-processing to speed search
 
-                neval = 2*int(10.*2.**(ndim/12.))
-                nkeep = 2*min(8,neval)
+#                 neval = 2*int(10.*2.**(ndim/12.))
+#                 nkeep = 2*min(8,neval)
 
-#                 neval = int(3) 
-#                 nkeep = int(2)
-                
-                # parallelgridsearch generates pseudo-random grid, then performs an ICDF transform
-                # to map to multinormal distrinbution centered on x_start and with widths given by hyper params
+                neval = int(3) 
+                nkeep = int(2)
 
                 # add the 10 best points seen so far (largest Y_obs)
                 nbest = 3 # add the best points seen so far (largest Y_obs)
                 nstart = 2 # make sure some starting points are there to prevent run away searches
-#                 nbest = 1 # add the best points seen so far (largest Y_obs)
-#                 nstart = 1 # make sure some starting points are there to prevent run away searches
-               
                 
                 yobs = np.array([y[0][0] for y in self.Y_obs])
                 isearch = yobs.argsort()[-nbest:]
@@ -395,11 +474,13 @@ class BayesOpt:
 
                 v0s = None
                 
-                
                 for i in isearch:
-                    
+#                 """
+#                 parallelgridsearch generates pseudo-random grid, then performs an ICDF transform
+#                 to map to multinormal distrinbution centered on x_start and with widths given by hyper params
+#                 """
                     vs = parallelgridsearch(aqfcn,self.X_obs[i],self.searchBoundScaleFactor * 0.6*self.lengthscales,fargs,neval,nkeep)
-                   
+                                      
                     if type(v0s) == type(None):
                         v0s = copy.copy(vs)
                     else:
@@ -412,12 +493,11 @@ class BayesOpt:
                 v0best = v0s[0]
                 
                 
-
                 if basinhoppingQ:
                     # use basinhopping
                     bkwargs = dict(niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':fargs,'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}}) # keyword args for basinhopping
                     res = parallelbasinhopping(aqfcn,x0s,bkwargs)
-
+                
                 else:
                     # use minimize
                     mkwargs = dict(bounds=iter_bounds, method=optmethod, options={'maxiter':maxiter}, tol=tolerance) # keyword args for scipy.optimize.minimize
@@ -426,10 +506,10 @@ class BayesOpt:
             else: # single-processing
 
                 if basinhoppingQ:
-                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':(self.model, y_best, self.acq_func[1], alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
+                    res = basinhopping(aqfcn, x_start,niter=niter,niter_success=niter_success, minimizer_kwargs={'method':optmethod,'args':(self.model, y_best, self.acq_func[1], self.alpha),'tol':tolerance,'bounds':iter_bounds,'options':{'maxiter':maxiter}})
 
                 else:
-                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], alpha), method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
+                    res = minimize(aqfcn, x_start, args=(self.model, y_best, self.acq_func[1], self.alpha), method=optmethod,tol=tolerance,bounds=iter_bounds,options={'maxiter':maxiter})
 
                 res = res.x
                 
@@ -454,7 +534,7 @@ def negProbImprove(x_new, model, y_best, xi):
 
     return -norm.cdf(Z)
 
-def negExpImprove(x_new, model, y_best, xi, alpha=1.0):
+def negExpImprove(x_new, model, y_best, xi,alpha = 1.0):
     """
     The common acquisition function, expected improvement. Returns the
     negative for the minimizer (so that EI is maximized). Alpha attempts
@@ -473,9 +553,7 @@ def negExpImprove(x_new, model, y_best, xi, alpha=1.0):
     EI = diff * norm.cdf(Z) + np.sqrt(y_var) * norm.pdf(Z)
     return alpha * (-EI) + (1. - alpha) * (-y_mean)
 
-# GP upper confidence bound
-# original paper: https://arxiv.org/pdf/0912.3995.pdf
-# tutorial: http://www.cs.ubc.ca/~nando/540-2013/lectures/l7.pdf
+
 def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
     """
     GPUCB: Gaussian process upper confidence bound aquisition function
@@ -487,13 +565,18 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
     model: OnlineGP object
     ndim: feature space dimensionality (how many devices are varied)
     nsteps: current step number counting from 1
-    nu: nu in the tutorial (see above)
-    delta: delta in the tutorial (see above)
+    nu: nu in the tutorial (see below)
+    delta: delta in the tutorial (see below)
+    
+    
+    GP upper confidence bound
+    original paper: https://arxiv.org/pdf/0912.3995.pdf
+    tutorial: http://www.cs.ubc.ca/~nando/540-2013/lectures/l7.pdf
     """
 
     if nsteps==0: nsteps += 1
     (y_mean, y_var) = model.predict(np.array(x_new,ndmin=2))
-
+#     print('(y_mean, y_var) = ',(y_mean, y_var))
     if delta is None:
         GPUCB = y_mean + nu * np.sqrt(y_var)
     else:
@@ -502,17 +585,4 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
 
     return -GPUCB
 
-# old version
-#def negUCB(x_new, model, mult):
-    #"""
-    #The upper confidence bound acquisition function. Currently only partially
-    #implemented. The mult parameter specifies how wide the confidence bound
-    #should be, and there currently is no way to compute this parameter. This
-    #acquisition function shouldn't be used until there is a proper mult.
-    #"""
-    #(y_new, var) = model.predict(np.array(x_new,ndmin=2))
 
-    #UCB = y_new + mult * np.sqrt(var)
-    #return -UCB
-
-# Thompson sampling

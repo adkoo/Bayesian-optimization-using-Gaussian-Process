@@ -1,2 +1,8 @@
 **/.ipynb_checkpoints
 **/__pycache__
+*.pyc
+*.pyo
+__pycache__/
+.DS_Store
+*.xccheckout
+.ipynb_checkpoints
