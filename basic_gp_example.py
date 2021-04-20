@@ -52,7 +52,9 @@ print('ucb_params',opt.ucb_params)
 
 #run the gp search for some number of steps
 Obj_state_s=[]
-optimize_kernel_on_the_fly = None
+
+optimize_kernel_on_the_fly = None #optimize_kernel_on_the_fly is the iteration number to start optimize the kernel's hyperparmaters. If None, no optimization of the hypers during BO. 
+
 Niter = 10
 for i in range(Niter):
     clear_output(wait=True) 
