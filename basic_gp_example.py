@@ -52,7 +52,7 @@ print('ucb_params',opt.ucb_params)
 
 #run the gp search for some number of steps
 Obj_state_s=[]
-
+optimize_kernel_on_the_fly = None
 Niter = 10
 for i in range(Niter):
     clear_output(wait=True) 
