@@ -42,7 +42,7 @@ ndim = len(dev_ids)
 gp_precisionmat = scan_params['gp_precisionmat']
 gp_amp = scan_params['gp_amp'] 
 gp_noise_variance =scan_params['gp_noise'] 
-hyperparams = {'precisionMatrix': gp_precisionmat, 'amplitude': gp_amp, 'noise_var': gp_noise_variance} 
+hyperparams = {'precisionMatrix': gp_precisionmat, 'amplitude_covar': gp_amp, 'noise_variance': gp_noise_variance} 
 gp = OGP(ndim, hyperparams)
 
 #create the bayesian optimizer that will use the gp as the model to optimize the machine 
