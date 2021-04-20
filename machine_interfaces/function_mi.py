@@ -3,7 +3,7 @@
 import numpy as np
 
 class machine_interface:
-    def __init__(self, dev_ids, start_point = None, funcobj=['booth']):
+    def __init__(self, dev_ids, start_point = None, funcobj=['booth'][0]):
         self.pvs = np.array(dev_ids)
         self.name = 'function_mi' 
         self.funcobj = funcobj
@@ -27,9 +27,9 @@ class machine_interface:
         elif self.funcobj == 'x_2_sin':
             y= -np.sin(3*x) - np.dot(x,x) + 0.7*x   
         elif self.funcobj == 'booth':
-            print('here')
             y = (x[0]+2*x[1]-7)**2 + (x[1]+2*x[0]-5)**2 
-        print('here',self.funcobj)
+            y *= -1
+   
         self.my_counter+=1
         self.my_x += [x]  
         self.my_y += [y]
