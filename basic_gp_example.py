@@ -1,5 +1,6 @@
 """
 This code will run an offline example as-is without any input arguments. Simply run the file in python.
+Use the OptOnFly=True flag to optimise on the fly
 
 In order to use it on a specific machine:
 1. Change the *importlib.import_module('machine_interfaces.machine_interface_example')* to your machine interface name.
@@ -9,6 +10,8 @@ In order to use it on a specific machine:
 """
 
 import numpy as np
+import os
+import datetime
 import importlib
 import time
 import matplotlib.pyplot as plt
@@ -19,8 +22,8 @@ warnings.simplefilter("ignore")
 from modules.bayes_optimization import BayesOpt, negUCB, negExpImprove
 from modules.OnlineGP import OGP
 
-saveResultsQ = False
-
+saveResultsQ = True
+OptOnFly = False  # use this to switch between using the hyperparameters from the params file, and optimising these on the fly
 mi_module = importlib.import_module('machine_interfaces.machine_interface_example')
 
 
@@ -36,6 +39,7 @@ dev_ids = scan_params['dev_ids']
 start_point = 0*scan_params['start_point'] #if start_point is set to None, the optimizer will start from the current device settings.
 mi = mi_module.machine_interface(dev_ids = dev_ids, start_point = start_point)  #an isotropic n-dimensional gaussian with amplitude=1, centered at the origin, plus gaussian background noise with std dev = 0.1
 
+
 #create the gp
 ndim = len(dev_ids)
 # GP parameters
@@ -45,44 +49,48 @@ gp_noise_variance =scan_params['gp_noise']
 hyperparams = {'precisionMatrix': gp_precisionmat, 'amplitude_covar': gp_amp, 'noise_variance': gp_noise_variance} 
 gp = OGP(ndim, hyperparams)
 
-#create the bayesian optimizer that will use the gp as the model to optimize the machine 
-opt = BayesOpt(gp, mi, acq_func="UCB", start_dev_vals = mi.x, dev_ids = dev_ids)
-opt.ucb_params = scan_params['ucb_params'] #set the acquisition function parameters
-print('ucb_params',opt.ucb_params)
+#create the bayesian optimizer that will use the gp as the model to optimize the machine
+
+if OptOnFly:
+    # optimize_kernel_on_the_fly is the iteration number to start optimize the kernel's hyperparmaters. If None, no optimization of the hypers during BO.
+    optimize_kernel_on_the_fly = 2
+    opt = BayesOpt(gp, mi, acq_func="UCB", start_dev_vals=mi.x, dev_ids=dev_ids,
+                   optimize_kernel_on_the_fly=optimize_kernel_on_the_fly)
+    # opt.ucb_params = scan_params['ucb_params']  # set the acquisition function parameters
+else:
+    optimize_kernel_on_the_fly = None
+    opt = BayesOpt(gp, mi, acq_func="UCB", start_dev_vals = mi.x, dev_ids = dev_ids)
+    opt.ucb_params = scan_params['ucb_params'] #set the acquisition function parameters
 
 #run the gp search for some number of steps
 Obj_state_s=[]
 
-optimize_kernel_on_the_fly = None #optimize_kernel_on_the_fly is the iteration number to start optimize the kernel's hyperparmaters. If None, no optimization of the hypers during BO. 
-
-Niter = 10
+Niter = 100
 for i in range(Niter):
     clear_output(wait=True) 
     print ('iteration =', i)
     print ('current position:', mi.x, 'current objective value:', mi.getState()[1])
    
     Obj_state_s.append(mi.getState()[1][0])
-    
-    f = plt.figure(figsize=(20,3))
-    ax = f.add_subplot(121)
-    ax2 = f.add_subplot(122)
-    ax.set_ylabel('Input controls',fontsize=12)
-    ax.set_xlabel('Iteration',fontsize=12)
-    for x, label in zip(opt.X_obs.T, opt.dev_ids):
-        ax.plot(x,'.-',label = label)
-    ax.legend()
-    ax2.set_ylabel('Objective',fontsize=12)
-    ax2.set_xlabel('Iteration',fontsize=12)
-    ax2.plot(Obj_state_s,'.-')
-    plt.show(); 
-    
     if optimize_kernel_on_the_fly is not None:
         if i > optimize_kernel_on_the_fly:
-            opt.optimize_kernel_hyperparameters()    
-
+            opt.optimize_kernel_hyperparameters()
     opt.OptIter()
-    time.sleep(acquisition_delay)   
-    
+    time.sleep(acquisition_delay)
+
+f = plt.figure(figsize=(20, 3))
+ax = f.add_subplot(121)
+ax2 = f.add_subplot(122)
+ax.set_ylabel('Input controls', fontsize=12)
+ax.set_xlabel('Iteration', fontsize=12)
+for x, label in zip(opt.X_obs.T, opt.dev_ids):
+    ax.plot(x, '.-', label=label)
+ax.legend()
+ax2.set_ylabel('Objective', fontsize=12)
+ax2.set_xlabel('Iteration', fontsize=12)
+ax2.plot(Obj_state_s, '.-')
+plt.show()
+
 #save results if desired
 if saveResultsQ == True:
     timestr = datetime.now().strftime('%Y-%m-%d-%H%M%S')
