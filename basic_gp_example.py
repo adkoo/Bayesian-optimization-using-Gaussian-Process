@@ -55,7 +55,7 @@ Obj_state_s=[]
 
 optimize_kernel_on_the_fly = None #optimize_kernel_on_the_fly is the iteration number to start optimize the kernel's hyperparmaters. If None, no optimization of the hypers during BO. 
 
-Niter = 10
+Niter = 100
 for i in range(Niter):
     clear_output(wait=True) 
     print ('iteration =', i)
@@ -63,26 +63,28 @@ for i in range(Niter):
    
     Obj_state_s.append(mi.getState()[1][0])
     
-    f = plt.figure(figsize=(20,3))
-    ax = f.add_subplot(121)
-    ax2 = f.add_subplot(122)
-    ax.set_ylabel('Input controls',fontsize=12)
-    ax.set_xlabel('Iteration',fontsize=12)
-    for x, label in zip(opt.X_obs.T, opt.dev_ids):
-        ax.plot(x,'.-',label = label)
-    ax.legend()
-    ax2.set_ylabel('Objective',fontsize=12)
-    ax2.set_xlabel('Iteration',fontsize=12)
-    ax2.plot(Obj_state_s,'.-')
-    plt.show(); 
+
     
     if optimize_kernel_on_the_fly is not None:
         if i > optimize_kernel_on_the_fly:
             opt.optimize_kernel_hyperparameters()    
 
     opt.OptIter()
-    time.sleep(acquisition_delay)   
-    
+    time.sleep(acquisition_delay)
+
+f = plt.figure(figsize=(20, 3))
+ax = f.add_subplot(121)
+ax2 = f.add_subplot(122)
+ax.set_ylabel('Input controls', fontsize=12)
+ax.set_xlabel('Iteration', fontsize=12)
+for x, label in zip(opt.X_obs.T, opt.dev_ids):
+    ax.plot(x, '.-', label=label)
+ax.legend()
+ax2.set_ylabel('Objective', fontsize=12)
+ax2.set_xlabel('Iteration', fontsize=12)
+ax2.plot(Obj_state_s, '.-')
+plt.show()
+
 #save results if desired
 if saveResultsQ == True:
     timestr = datetime.now().strftime('%Y-%m-%d-%H%M%S')

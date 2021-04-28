@@ -7,6 +7,7 @@ recovery_sleep_time_seconds = 1 # number of seconds to wait before trying to lau
 import numpy as np
 import multiprocessing as mp
 import copy
+import time
 
 # handle 'IOError: [Errno 4] Interrupted system call' errors from multiprocessing.Queue.get
 #https://stackoverflow.com/questions/14136195/what-is-the-proper-way-to-handle-in-python-ioerror-errno-4-interrupted-syst
@@ -34,7 +35,7 @@ try:
         #print 'worker: margs = ',margs
         res = minimize(f, x0, args = fargs, **margs)
         #return [res.x, res.fun]
-        out_q.put([[res.x, res.fun[0][0]]])
+        out_q.put([[res.x, res.fun[0]]])
 
     # parallelize minimizations using different starting positions using multiprocessing, scipy.optimize.minimize
     def parallelminimize(f,x0s,fargs,margs,v0best=None,relative_bounds=None):
@@ -337,7 +338,7 @@ try:
     def eworker(f,x,fargs,out_q):
         # worker invoked in a process puts the results in the output queue out_q
         res = f(x, *fargs)
-        out_q.put(np.hstack((x, res[0][0])))
+        out_q.put(np.hstack((x, res[0])))
 
     # eval function over a range of initial points neval and return the nkeep lowest function evals
     def parallelgridsearch(f,x0,lengths,fargs,neval,nkeep):

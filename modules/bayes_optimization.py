@@ -583,6 +583,6 @@ def negUCB(x_new, model, ndim, nsteps, nu = 1., delta = 1.):
         tau = 2.*np.log(nsteps**(0.5*ndim+2.)*(np.pi**2.)/3./delta)
         GPUCB = y_mean + np.sqrt(nu * tau * y_var)
 
-    return -GPUCB
+    return -GPUCB[0]
 
 
